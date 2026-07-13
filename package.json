@@ -1,0 +1,11 @@
+{
+  "name": "edgeone-fund-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "基金行情与规则化买卖辅助面板，适配 EdgeOne Makers。",
+  "scripts": {
+    "check": "node --check public/assets/app.js && node --check edge-functions/api/fund/[code].js",
+    "serve": "python -m http.server 4173 -d public"
+  }
+}
