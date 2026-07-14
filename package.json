@@ -1,11 +1,11 @@
 {
   "name": "fund-smart-dashboard",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
-  "description": "基智盘：适配EdgeOne Makers的实时基金行情与历史买卖信号双页面项目。",
+  "description": "基智盘：适配EdgeOne Makers的实时行情、历史分析与基金持仓设置三页面项目。",
   "scripts": {
-    "check": "node --check public/assets/common.js && node --check public/assets/home.js && node --check public/assets/realtime.js && node --check public/assets/history.js && node --check edge-functions/api/_shared.js && node --check edge-functions/api/realtime/[code].js && node --check edge-functions/api/history/[code].js && node --check edge-functions/api/config.js && node --check edge-functions/api/health.js",
+    "check": "node --check public/assets/common.js && node --check public/assets/home.js && node --check public/assets/realtime.js && node --check public/assets/history.js && node --check public/assets/settings.js && node --check edge-functions/api/_shared.js && node --check edge-functions/api/realtime/[code].js && node --check edge-functions/api/history/[code].js && node --check edge-functions/api/config.js && node --check edge-functions/api/health.js",
     "serve": "python -m http.server 4173 -d public"
   }
 }

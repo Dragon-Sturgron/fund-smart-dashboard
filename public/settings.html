@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f4f7fd" /><meta name="description" content="管理基金代码与个人持仓。" />
+  <title>设置｜基智盘</title><link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body data-page="settings">
+  <div class="background-orb orb-one"></div><div class="background-orb orb-two"></div>
+  <main class="page-shell">
+    <nav class="top-nav" aria-label="页面导航">
+      <a class="brand-link" href="/realtime.html" aria-label="基智盘首页">基智盘</a>
+      <div class="page-tabs" role="tablist" aria-label="页面切换">
+        <a class="page-tab" data-nav="realtime" href="/realtime.html" role="tab" aria-selected="false"><span class="tab-mark live-mark" aria-hidden="true"></span><span><b>实时行情页</b><small>查看今天涨跌</small></span></a>
+        <a class="page-tab" data-nav="history" href="/history.html" role="tab" aria-selected="false"><span class="tab-mark history-mark" aria-hidden="true"></span><span><b>历史分析页</b><small>计算买卖信号</small></span></a>
+        <a class="page-tab" data-nav="settings" href="/settings.html" role="tab" aria-selected="false"><span class="tab-mark settings-mark" aria-hidden="true"></span><span><b>设置</b><small>基金与个人持仓</small></span></a>
+      </div>
+    </nav>
+    <header class="hero panel"><div class="hero-copy"><div class="eyebrow"><span></span> FUND SETTINGS</div><h1>基金与个人持仓设置</h1><p>在这里统一添加基金代码，并填写成本净值、投入本金和计划最高金额。保存后，实时行情页和历史分析页会共用同一份数据。</p></div><div class="hero-badge"><span class="pulse-dot"></span>本机缓存 + EdgeOne KV</div></header>
+    <section class="control-panel panel">
+      <div class="section-title"><div><span class="section-kicker">ADD FUNDS</span><h2>添加基金代码</h2></div><p>最多保存 12 只基金，可一次粘贴多个六位代码。</p></div>
+      <label class="field"><span>基金代码</span><textarea id="newFundCodes" rows="3" placeholder="例如：005827、000001、110022"></textarea><small>支持换行、逗号、空格或分号分隔；重复代码会自动忽略。</small></label>
+      <div class="button-row"><button id="addFundsBtn" class="btn btn-primary" type="button">添加到基金列表</button><button id="sampleBtn" class="btn btn-ghost" type="button">填入示例</button><button id="recognizeBtn" class="btn btn-light" type="button">识别基金名称</button><button id="syncNowBtn" class="btn btn-light" type="button">立即同步 KV</button></div>
+      <div class="sync-line"><div id="syncStatus" class="sync-status pending"><span></span>正在连接 KV</div><small>基金名称识别失败也不会影响保存代码；稍后可再次识别。</small></div><div id="globalMessage" class="global-message" role="status"></div>
+    </section>
+    <section class="stat-grid"><article class="stat-card panel"><span>基金数量</span><strong id="statFundCount">0</strong><small>最多 12 只</small></article><article class="stat-card panel positive"><span>已填写持仓</span><strong id="statHoldingCount">0</strong><small>成本与本金均已填写</small></article><article class="stat-card panel"><span>累计投入本金</span><strong id="statPrincipal">¥0</strong><small>根据个人持仓汇总</small></article><article class="stat-card panel warning"><span>待补充持仓</span><strong id="statMissingCount">0</strong><small>不影响行情查看</small></article></section>
+    <section class="results-panel panel">
+      <div class="section-title"><div><span class="section-kicker">MY FUNDS</span><h2>基金列表与个人持仓</h2></div><div class="inline-actions"><button id="saveAllBtn" class="btn btn-primary" type="button">保存全部持仓</button><button id="clearAllBtn" class="btn btn-light danger-outline" type="button">清空全部</button></div></div>
+      <div class="settings-help"><b>成本净值</b>用于估算持仓收益；<b>投入本金</b>用于计算份额和当前市值；<b>计划最高金额</b>用于判断是否超配并影响卖出分。</div>
+      <div class="table-wrap settings-table-wrap"><table class="settings-table"><thead><tr><th>基金</th><th>成本净值</th><th>投入本金（元）</th><th>计划最高金额（元）</th><th>持仓状态</th><th>操作</th></tr></thead><tbody id="settingsBody"><tr><td colspan="6" class="table-empty">尚未添加基金代码。</td></tr></tbody></table></div>
+      <div id="mobileSettingsCards" class="mobile-cards"></div>
+    </section>
+    <footer><p>删除基金会同时删除该基金的个人持仓；其他基金数据不会受到影响。</p></footer>
+  </main>
+  <div id="loadingOverlay" class="loading-overlay" hidden><div class="loader-card"><div class="spinner"></div><strong>正在识别基金名称</strong><span id="loadingText">请稍候</span></div></div>
+  <script type="module" src="/assets/settings.js"></script>
+</body>
+</html>

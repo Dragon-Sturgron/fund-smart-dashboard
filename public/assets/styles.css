@@ -28,7 +28,7 @@ button { cursor: pointer; }
 .panel { background: var(--panel); border: 1px solid rgba(255,255,255,.92); box-shadow: var(--shadow); backdrop-filter: blur(18px); border-radius: 24px; }
 .top-nav { position: sticky; top: 10px; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 10px 12px 10px 18px; margin-bottom: 14px; background: rgba(255,255,255,.91); border: 1px solid rgba(255,255,255,.96); box-shadow: var(--shadow); border-radius: 20px; backdrop-filter: blur(18px); }
 .brand-link { text-decoration: none; font-weight: 950; letter-spacing: -.04em; padding: 10px 8px; font-size: 18px; white-space: nowrap; }
-.page-tabs { display: grid; grid-template-columns: repeat(2, minmax(185px, 1fr)); gap: 6px; padding: 5px; border: 1px solid #e2e8f2; border-radius: 16px; background: #f2f5fa; }
+.page-tabs { display: grid; grid-template-columns: repeat(3, minmax(155px, 1fr)); gap: 6px; padding: 5px; border: 1px solid #e2e8f2; border-radius: 16px; background: #f2f5fa; }
 .page-tab { min-height: 52px; display: flex; align-items: center; gap: 10px; padding: 8px 14px; border: 1px solid transparent; border-radius: 12px; color: #6d788b; text-decoration: none; transition: transform .18s ease, box-shadow .18s ease, background .18s ease, color .18s ease; }
 .page-tab:hover { color: var(--primary); background: rgba(255,255,255,.72); }
 .page-tab.active { color: white; background: linear-gradient(135deg, var(--primary), #587cff); border-color: rgba(49,94,251,.24); box-shadow: 0 8px 20px rgba(49,94,251,.23); transform: translateY(-1px); }
@@ -39,6 +39,7 @@ button { cursor: pointer; }
 .tab-mark { width: 10px; height: 10px; flex: 0 0 auto; border-radius: 50%; background: #aab4c5; box-shadow: 0 0 0 5px rgba(145,157,177,.12); }
 .live-mark { background: #18b981; box-shadow: 0 0 0 5px rgba(24,185,129,.12); }
 .history-mark { background: #7c65df; box-shadow: 0 0 0 5px rgba(124,101,223,.12); }
+.settings-mark { background: #e5a229; box-shadow: 0 0 0 5px rgba(229,162,41,.13); }
 .page-tab.active .tab-mark { background: white; box-shadow: 0 0 0 5px rgba(255,255,255,.16); }
 .redirect-page { width: min(430px, calc(100% - 30px)); min-height: 180px; margin: 18vh auto; padding: 30px; display: grid; place-items: center; gap: 18px; text-align: center; }
 .hero { min-height: 170px; padding: 34px 36px; display: flex; align-items: center; justify-content: space-between; gap: 26px; overflow: hidden; position: relative; }
@@ -55,6 +56,8 @@ h1 { margin: 12px 0 5px; font-size: clamp(32px, 4vw, 48px); letter-spacing: -.05
 .control-grid { display: grid; grid-template-columns: minmax(360px, 2fr) repeat(3, minmax(150px, 1fr)); gap: 14px; align-items: start; }
 .control-grid.two { grid-template-columns: minmax(360px, 2fr) minmax(180px, .7fr); }
 .control-grid.history { grid-template-columns: minmax(360px, 2fr) repeat(2, minmax(160px, .75fr)); }
+.control-grid.compact-control { grid-template-columns: minmax(180px, 320px); margin-top: 18px; }
+.control-grid.analysis-controls { grid-template-columns: repeat(2, minmax(180px, 300px)); margin-top: 18px; }
 .field { display: grid; gap: 8px; }
 .field > span { font-size: 12px; font-weight: 800; color: #66758a; }
 .field small { color: #8f99aa; }
@@ -102,6 +105,21 @@ textarea:focus, input:focus, select:focus { border-color: #9bb0ff; box-shadow: 0
 .code-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .code-chip { display: inline-flex; flex-direction: column; gap: 1px; background: #f1f5ff; color: #405170; border: 1px solid #e0e8ff; border-radius: 10px; padding: 7px 10px; font-weight: 800; font-size: 12px; }
 .code-chip small { font-weight: 500; color: #8792a4; }
+
+.saved-list-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.saved-list-row h2 { margin: 5px 0 5px; font-size: 22px; letter-spacing: -.035em; }
+.saved-list-row p { margin: 0; line-height: 1.7; }
+.inline-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.settings-help { margin-bottom: 14px; padding: 12px 14px; color: #68758a; background: #f5f7fb; border: 1px solid #e7ebf2; border-radius: 12px; font-size: 12px; line-height: 1.7; }
+.settings-table { min-width: 980px; }
+.settings-table input { min-width: 150px; min-height: 38px; }
+.btn-small { min-height: 34px; padding: 6px 11px; font-size: 12px; }
+.danger-outline { color: var(--red); border-color: #ffd2d0; background: #fff7f7; }
+.danger-outline:hover { background: var(--red-soft); }
+.settings-mobile-fields { display: grid; gap: 11px; margin-top: 15px; }
+.empty-mobile-card { padding: 20px; border: 1px dashed #d8dfeb; border-radius: 15px; color: #8792a5; text-align: center; background: rgba(255,255,255,.55); }
+.empty-mobile-card a { color: var(--primary); font-weight: 800; }
+
 .market-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .market-panel > p { margin: 15px 0 0; color: var(--muted); }
 .market-status { display: inline-flex; align-items: center; gap: 9px; padding: 9px 13px; border-radius: 999px; font-size: 13px; font-weight: 800; }
@@ -174,7 +192,7 @@ footer { padding: 22px 10px 0; text-align: center; color: #8c96a7; font-size: 12
   .page-shell { width: calc(100% - 14px); margin-top: 8px; }
   .top-nav { top: 5px; flex-direction: column; align-items: stretch; gap: 5px; padding: 8px; }
   .brand-link { text-align: center; padding: 6px; }
-  .page-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .page-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
   .page-tab { min-height: 50px; justify-content: center; padding: 8px 7px; gap: 7px; }
   .page-tab small { display: none; }
   .hero, .control-panel, .content-panel, .position-panel, .market-panel, .results-panel, .formula-panel { border-radius: 18px; padding: 19px; }
@@ -184,7 +202,9 @@ footer { padding: 22px 10px 0; text-align: center; color: #8c96a7; font-size: 12
   .field-wide { grid-column: auto; }
   .button-row { display: grid; grid-template-columns: repeat(2, 1fr); }.btn-primary { grid-column: span 2; order: -1; }
   .sync-line { align-items: flex-start; flex-direction: column; }
-  .section-title, .market-head { align-items: flex-start; flex-direction: column; gap: 6px; }
+  .section-title, .market-head, .saved-list-row { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .inline-actions { width: 100%; justify-content: stretch; }
+  .inline-actions .btn { flex: 1; }
   .saved-overview { grid-template-columns: 1fr; gap: 8px; }
   .big-number { font-size: 42px; }
   h1 { font-size: 31px; }

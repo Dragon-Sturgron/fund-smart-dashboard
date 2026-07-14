@@ -1,14 +1,14 @@
 import {
-  $, activateCurrentNav, clamp, escapeHtml, fetchHistory, fmt, initializeCloud, money,
+  $, activateCurrentNav, clamp, escapeHtml, fetchHistory, fmt, initializeCloud,
   num, parseCodes, pct, readLocalState, retryCloudSync, saveAndSync, setGlobalMessage,
   setLoading, updateFundMeta
 } from './common.js';
 
 const els = {
-  codes: $('#fundCodes'), risk: $('#riskLevel'), target: $('#targetReturn'), refresh: $('#refreshBtn'), sample: $('#sampleBtn'),
-  clear: $('#clearBtn'), body: $('#historyBody'), mobile: $('#mobileHistoryCards'), message: $('#globalMessage'),
+  risk: $('#riskLevel'), target: $('#targetReturn'), refresh: $('#refreshBtn'),
+  body: $('#historyBody'), mobile: $('#mobileHistoryCards'), message: $('#globalMessage'),
   overlay: $('#loadingOverlay'), loadingText: $('#loadingText'), sync: $('#syncStatus'), syncNow: $('#syncNowBtn'),
-  positions: $('#positionEditor'), statTotal: $('#statTotal'), statBuy: $('#statBuy'), statWait: $('#statWait'),
+  summary: $('#savedFundSummary'), statTotal: $('#statTotal'), statBuy: $('#statBuy'), statWait: $('#statWait'),
   statSell: $('#statSell'), statTime: $('#statTime'), marketStatus: $('#marketStatus'), marketSummary: $('#marketSummary')
 };
 
@@ -35,15 +35,34 @@ function returnFrom(series, days) {
   const start = series[Math.max(0, series.length - 1 - days)].nav;
   return start ? (end / start - 1) * 100 : NaN;
 }
+function getSavedCodes() {
+  const state = readLocalState();
+  const codes = parseCodes(state.codes);
+  const hashCode = location.hash.replace('#', '');
+  return /^\d{6}$/.test(hashCode) && !codes.includes(hashCode) ? [hashCode, ...codes].slice(0, 12) : codes;
+}
+function renderSavedSummary() {
+  const state = readLocalState();
+  const codes = getSavedCodes();
+  if (!codes.length) {
+    els.summary.innerHTML = '尚未添加基金，请先前往 <a class="text-link" href="/settings.html">设置页</a>。';
+    return;
+  }
+  const names = codes.slice(0, 5).map(code => state.fundMeta?.[code]?.name || code);
+  const holdingCount = codes.filter(code => {
+    const p = state.positions?.[code] || {};
+    return num(p.costNav) > 0 && num(p.principal) > 0;
+  }).length;
+  els.summary.textContent = `共 ${codes.length} 只基金，已填写 ${holdingCount} 只个人持仓：${names.join('、')}${codes.length > 5 ? ' 等' : ''}`;
+}
 function loadControls() {
   const state = readLocalState();
-  els.codes.value = state.codes || '';
   els.risk.value = ['conservative', 'normal', 'aggressive'].includes(state.risk) ? state.risk : 'normal';
   els.target.value = num(state.target, 20);
+  renderSavedSummary();
 }
 function saveControls(extra = {}) {
   return saveAndSync({
-    codes: parseCodes(els.codes.value).join('\n'),
     risk: els.risk.value,
     target: Math.max(1, num(els.target.value, 20)),
     ...extra
@@ -161,33 +180,6 @@ function buildFund(raw) {
   const action = decideAction(metrics, scores);
   return { ...raw, name: raw.name || `基金 ${raw.code}`, metrics, position, scores, action };
 }
-function renderPositionEditor() {
-  if (!currentFunds.length) {
-    els.positions.className = 'position-editor empty-state-mini';
-    els.positions.textContent = '历史数据加载后，可在这里录入持仓；不填写时仍可计算买入分，但不会触发基于个人仓位的卖出信号。';
-    return;
-  }
-  els.positions.className = 'position-editor';
-  els.positions.innerHTML = `<table class="position-table"><thead><tr><th>基金</th><th>成本净值</th><th>投入本金（元）</th><th>计划最高金额（元）</th><th>估算市值</th><th>持仓收益</th></tr></thead><tbody>${currentFunds.map(fund => `
-    <tr>
-      <td>${escapeHtml(fund.name)}<div class="fund-code">${fund.code}</div></td>
-      <td><input data-pos="costNav" data-code="${fund.code}" type="number" step="0.0001" min="0" value="${escapeHtml(fund.position.costNav)}" placeholder="例如1.2345"></td>
-      <td><input data-pos="principal" data-code="${fund.code}" type="number" step="0.01" min="0" value="${escapeHtml(fund.position.principal)}" placeholder="例如10000"></td>
-      <td><input data-pos="planMax" data-code="${fund.code}" type="number" step="0.01" min="0" value="${escapeHtml(fund.position.planMax)}" placeholder="例如20000"></td>
-      <td>${fund.scores.hasHolding ? money(fund.scores.marketValue) : '--'}</td>
-      <td class="${fund.scores.holdingReturn > 0 ? 'text-red' : fund.scores.holdingReturn < 0 ? 'text-green' : ''}">${fund.scores.hasHolding ? pct(fund.scores.holdingReturn) : '--'}</td>
-    </tr>`).join('')}</tbody></table>`;
-  els.positions.querySelectorAll('input[data-pos]').forEach(input => input.addEventListener('change', savePosition));
-}
-function savePosition(event) {
-  const input = event.currentTarget;
-  const state = readLocalState();
-  const positions = { ...(state.positions || {}) };
-  positions[input.dataset.code] = { ...(positions[input.dataset.code] || {}), [input.dataset.pos]: input.value };
-  saveControls({ positions });
-  currentFunds = currentFunds.map(fund => buildFund({ code: fund.code, name: fund.name, history: fund.history, source: fund.source }));
-  renderAll();
-}
 function renderResults(errors = []) {
   const tableRows = currentFunds.map(fund => {
     const m = fund.metrics;
@@ -206,7 +198,7 @@ function renderResults(errors = []) {
     </tr>`;
   }).join('');
   const errorRows = errors.map(item => `<tr class="error-row"><td><div class="fund-code">${item.code}</div></td><td colspan="8"><span class="error-text">${escapeHtml(item.message)}</span></td></tr>`).join('');
-  els.body.innerHTML = tableRows || errorRows || '<tr><td colspan="9" class="table-empty">输入基金代码后点击“计算历史信号”。</td></tr>';
+  els.body.innerHTML = tableRows || errorRows || '<tr><td colspan="9" class="table-empty">请先在“设置”页添加基金代码。</td></tr>';
   if (tableRows && errorRows) els.body.insertAdjacentHTML('beforeend', errorRows);
   els.mobile.innerHTML = currentFunds.map(fund => {
     const m = fund.metrics;
@@ -235,17 +227,17 @@ function renderSummary() {
     : '读取历史净值后，将根据趋势、回撤、波动和个人仓位生成六档操作建议。';
 }
 function renderAll(errors = []) {
-  renderPositionEditor();
   renderResults(errors);
   renderSummary();
 }
 async function refreshHistory() {
-  const codes = parseCodes(els.codes.value);
+  const codes = getSavedCodes();
   if (!codes.length) {
-    setGlobalMessage(els.message, '请先输入至少一个六位基金代码。', 'error');
+    setGlobalMessage(els.message, '尚未添加基金，请先进入设置页添加基金代码。', 'error');
     return;
   }
   saveControls();
+  renderSavedSummary();
   setLoading(els.overlay, els.loadingText, true, `准备读取 ${codes.length} 只基金的历史净值`);
   const funds = [];
   const errors = [];
@@ -269,9 +261,6 @@ async function refreshHistory() {
 }
 
 els.refresh.addEventListener('click', refreshHistory);
-els.sample.addEventListener('click', () => { els.codes.value = '005827\n000001\n110022'; saveControls(); refreshHistory(); });
-els.clear.addEventListener('click', () => { els.codes.value = ''; currentFunds = []; saveControls(); renderAll(); setGlobalMessage(els.message, '已清空观察列表。', 'success'); });
-els.codes.addEventListener('change', saveControls);
 els.risk.addEventListener('change', () => { saveControls(); if (currentFunds.length) { currentFunds = currentFunds.map(fund => buildFund({ code: fund.code, name: fund.name, history: fund.history, source: fund.source })); renderAll(); } });
 els.target.addEventListener('change', () => { saveControls(); if (currentFunds.length) { currentFunds = currentFunds.map(fund => buildFund({ code: fund.code, name: fund.name, history: fund.history, source: fund.source })); renderAll(); } });
 els.syncNow.addEventListener('click', retryCloudSync);
@@ -279,9 +268,5 @@ els.syncNow.addEventListener('click', retryCloudSync);
 activateCurrentNav();
 await initializeCloud({ syncStatus: els.sync, message: els.message });
 loadControls();
-const hashCode = location.hash.replace('#', '');
-if (/^\d{6}$/.test(hashCode)) {
-  const codes = parseCodes(els.codes.value);
-  if (!codes.includes(hashCode)) els.codes.value = [hashCode, ...codes].slice(0, 12).join('\n');
-}
-if (parseCodes(els.codes.value).length) refreshHistory();
+if (getSavedCodes().length) refreshHistory();
+else renderAll();

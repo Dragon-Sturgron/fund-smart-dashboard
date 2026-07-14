@@ -5,27 +5,40 @@ import {
 } from './common.js';
 
 const els = {
-  codes: $('#fundCodes'), interval: $('#refreshInterval'), refresh: $('#refreshBtn'), sample: $('#sampleBtn'),
-  clear: $('#clearBtn'), body: $('#realtimeBody'), mobile: $('#mobileRealtimeCards'), message: $('#globalMessage'),
-  overlay: $('#loadingOverlay'), loadingText: $('#loadingText'), sync: $('#syncStatus'), syncNow: $('#syncNowBtn'),
-  statTotal: $('#statTotal'), statUp: $('#statUp'), statDown: $('#statDown'), statTime: $('#statTime'),
-  marketStatus: $('#marketStatus'), marketSummary: $('#marketSummary')
+  interval: $('#refreshInterval'), refresh: $('#refreshBtn'), body: $('#realtimeBody'),
+  mobile: $('#mobileRealtimeCards'), message: $('#globalMessage'), overlay: $('#loadingOverlay'),
+  loadingText: $('#loadingText'), sync: $('#syncStatus'), syncNow: $('#syncNowBtn'),
+  summary: $('#savedFundSummary'), statTotal: $('#statTotal'), statUp: $('#statUp'),
+  statDown: $('#statDown'), statTime: $('#statTime'), marketStatus: $('#marketStatus'),
+  marketSummary: $('#marketSummary')
 };
 
 let autoTimer = null;
 let currentRows = [];
 
+function getSavedCodes() {
+  return parseCodes(readLocalState().codes);
+}
+
+function renderSavedSummary() {
+  const state = readLocalState();
+  const codes = getSavedCodes();
+  if (!codes.length) {
+    els.summary.innerHTML = '尚未添加基金，请先前往 <a class="text-link" href="/settings.html">设置页</a>。';
+    return;
+  }
+  const names = codes.slice(0, 5).map(code => state.fundMeta?.[code]?.name || code);
+  els.summary.textContent = `共 ${codes.length} 只：${names.join('、')}${codes.length > 5 ? ' 等' : ''}`;
+}
+
 function loadControls() {
   const state = readLocalState();
-  els.codes.value = state.codes || '';
   els.interval.value = String([0, 30, 60, 120].includes(Number(state.interval)) ? Number(state.interval) : 60);
+  renderSavedSummary();
 }
 
 function saveControls() {
-  return saveAndSync({
-    codes: parseCodes(els.codes.value).join('\n'),
-    interval: Number(els.interval.value) || 0
-  });
+  return saveAndSync({ interval: Number(els.interval.value) || 0 });
 }
 
 function changeClass(value) {
@@ -34,8 +47,8 @@ function changeClass(value) {
 
 function renderTable(errors = []) {
   if (!currentRows.length && !errors.length) {
-    els.body.innerHTML = '<tr><td colspan="8" class="table-empty">输入基金代码后点击“刷新实时行情”。</td></tr>';
-    els.mobile.innerHTML = '';
+    els.body.innerHTML = '<tr><td colspan="8" class="table-empty">请先在“设置”页添加基金代码。</td></tr>';
+    els.mobile.innerHTML = '<div class="empty-mobile-card">尚未添加基金，前往<a href="/settings.html">设置页</a>添加。</div>';
     return;
   }
   const rows = currentRows.map(item => `
@@ -66,22 +79,25 @@ function renderSummary() {
   els.statTotal.textContent = String(currentRows.length);
   els.statUp.textContent = String(up);
   els.statDown.textContent = String(down);
-  els.statTime.textContent = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  els.statTime.textContent = currentRows.length ? new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '--:--';
   const average = currentRows.length ? currentRows.reduce((sum, item) => sum + (Number.isFinite(item.estimatedRate) ? item.estimatedRate : 0), 0) / currentRows.length : 0;
   els.marketStatus.className = `market-status ${average > 1 ? 'hot' : average < -1 ? 'cool' : 'neutral'}`;
-  els.marketStatus.innerHTML = `<span></span>${average > 1 ? '整体偏强' : average < -1 ? '整体偏弱' : '整体平稳'}`;
+  els.marketStatus.innerHTML = `<span></span>${currentRows.length ? (average > 1 ? '整体偏强' : average < -1 ? '整体偏弱' : '整体平稳') : '等待加载'}`;
   els.marketSummary.textContent = currentRows.length
     ? `观察列表平均盘中估算为 ${pct(average)}。实时页只反映当日盘中参考，不直接决定买卖；买卖判断请进入历史分析页。`
     : '刷新后将汇总观察列表的盘中估算表现。';
 }
 
 async function refreshRealtime({ silent = false } = {}) {
-  const codes = parseCodes(els.codes.value);
+  const codes = getSavedCodes();
+  renderSavedSummary();
   if (!codes.length) {
-    setGlobalMessage(els.message, '请先输入至少一个六位基金代码。', 'error');
+    currentRows = [];
+    renderTable();
+    renderSummary();
+    setGlobalMessage(els.message, '尚未添加基金，请先进入设置页添加基金代码。', 'error');
     return;
   }
-  saveControls();
   if (!silent) setLoading(els.overlay, els.loadingText, true, `准备读取 ${codes.length} 只基金`);
   const rows = [];
   const errors = [];
@@ -97,6 +113,7 @@ async function refreshRealtime({ silent = false } = {}) {
   currentRows = rows;
   updateFundMeta(rows);
   saveAndSync({ fundMeta: readLocalState().fundMeta });
+  renderSavedSummary();
   renderTable(errors);
   renderSummary();
   if (errors.length) {
@@ -114,14 +131,12 @@ function resetAutoTimer() {
 }
 
 els.refresh.addEventListener('click', () => refreshRealtime());
-els.sample.addEventListener('click', () => { els.codes.value = '005827\n000001\n110022'; saveControls(); refreshRealtime(); });
-els.clear.addEventListener('click', () => { els.codes.value = ''; currentRows = []; saveControls(); renderTable(); renderSummary(); setGlobalMessage(els.message, '已清空观察列表。', 'success'); });
 els.interval.addEventListener('change', () => { saveControls(); resetAutoTimer(); });
-els.codes.addEventListener('change', saveControls);
 els.syncNow.addEventListener('click', retryCloudSync);
 
 activateCurrentNav();
 await initializeCloud({ syncStatus: els.sync, message: els.message });
 loadControls();
 resetAutoTimer();
-if (parseCodes(els.codes.value).length) refreshRealtime();
+if (getSavedCodes().length) refreshRealtime();
+else { renderTable(); renderSummary(); }
