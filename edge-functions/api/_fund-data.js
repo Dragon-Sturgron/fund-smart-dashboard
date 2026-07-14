@@ -50,6 +50,12 @@ function parseName(text) {
   return match ? match[1] : '';
 }
 
+function cleanFundName(name, code) {
+  const value = String(name || '').trim();
+  if (!value || value === code || value === `基金 ${code}` || /^基金\s*\d{6}$/.test(value)) return '';
+  return value;
+}
+
 function ensureHistoryResult(code, name, source, rows) {
   const history = normalizeHistory(rows);
   if (history.length < 2) throw new Error(`${source}：历史数据不足`);
@@ -118,6 +124,54 @@ export async function getHistoryData(code) {
   }
 
   const error = new Error('历史净值数据源暂时不可用');
+  error.diagnostics = diagnostics;
+  throw error;
+}
+
+
+export async function getFundName(code) {
+  if (!/^\d{6}$/.test(code)) throw new Error('基金代码必须是六位数字');
+  const now = Date.now();
+  const diagnostics = [];
+  const estimateUrl = `https://fundgz.1234567.com.cn/js/${code}.js?rt=${now}`;
+  const detailUrl = `https://fund.eastmoney.com/pingzhongdata/${code}.js?v=${now}`;
+
+  const estimateTask = (async () => {
+    const text = await fetchText(estimateUrl, {
+      headers: browserHeaders(`https://fund.eastmoney.com/${code}.html`)
+    }, 5000);
+    const name = cleanFundName(parseEstimate(text, code).name, code);
+    if (!name) throw new Error('盘中接口未返回基金名称');
+    return { code, name, source: '天天基金盘中名称' };
+  })();
+
+  const detailTask = (async () => {
+    const text = await fetchText(detailUrl, {
+      headers: browserHeaders(`https://fund.eastmoney.com/${code}.html`)
+    }, 6000);
+    const name = cleanFundName(parseName(text), code);
+    if (!name) throw new Error('详情接口未返回基金名称');
+    return { code, name, source: '东方财富基金详情名称' };
+  })();
+
+  try {
+    return await Promise.any([estimateTask, detailTask]);
+  } catch (aggregateError) {
+    for (const reason of aggregateError?.errors || []) diagnostics.push(reason?.message || String(reason));
+  }
+
+  try {
+    const text = await fetchText(`https://r.jina.ai/http://fund.eastmoney.com/pingzhongdata/${code}.js?v=${now}`, {
+      headers: { accept: 'text/plain,*/*' }
+    }, 10000);
+    const name = cleanFundName(parseName(text), code);
+    if (!name) throw new Error('Jina 备用源未返回基金名称');
+    return { code, name, source: 'Jina · 东方财富基金详情名称' };
+  } catch (error) {
+    diagnostics.push(error.message);
+  }
+
+  const error = new Error('基金名称数据源暂时不可用');
   error.diagnostics = diagnostics;
   throw error;
 }

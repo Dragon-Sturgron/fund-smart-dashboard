@@ -171,15 +171,23 @@ export function getFundMeta(code) {
   return readLocalState().fundMeta?.[code] || {};
 }
 
+export function isUsableFundName(name, code = '') {
+  const value = String(name || '').trim();
+  if (!value || value === code || value === `基金 ${code}` || /^基金\s*\d{6}$/.test(value)) return false;
+  return true;
+}
+
 export function updateFundMeta(items = []) {
   const state = readLocalState();
   const fundMeta = { ...(state.fundMeta || {}) };
   for (const item of items) {
     if (!item?.code || !/^\d{6}$/.test(item.code)) continue;
+    const previous = fundMeta[item.code] || {};
+    const incomingName = isUsableFundName(item.name, item.code) ? String(item.name).trim() : '';
     fundMeta[item.code] = {
-      ...(fundMeta[item.code] || {}),
-      name: item.name || fundMeta[item.code]?.name || '',
-      lastSource: item.source || fundMeta[item.code]?.lastSource || '',
+      ...previous,
+      name: incomingName || previous.name || '',
+      lastSource: item.source || previous.lastSource || '',
       lastSuccessAt: new Date().toISOString()
     };
   }
@@ -431,6 +439,40 @@ export async function fetchRealtime(code) {
     const error = new Error(`实时数据不可用：${jsonpError.message || apiError?.message}`);
     error.details = [apiError?.message, jsonpError.message].filter(Boolean);
     throw error;
+  }
+}
+
+export async function fetchFundNamesMany(codes = []) {
+  const list = parseCodes(codes.join(','));
+  if (!list.length) return { items: [], errors: [] };
+  try {
+    const payload = await fetchJson(`/api/batch/names?codes=${encodeURIComponent(list.join(','))}`, 7500);
+    const items = Array.isArray(payload.data) ? payload.data.filter(item => isUsableFundName(item?.name, item?.code)) : [];
+    const batchErrors = Array.isArray(payload.errors) ? payload.errors : [];
+    const returned = new Set(items.map(item => item.code));
+    const retryCodes = list.filter(code => !returned.has(code));
+    if (!retryCodes.length) return { items, errors: [] };
+    const fallback = await Promise.allSettled(retryCodes.map(code => fetchJson(`/api/name/${code}`, 7000).then(payload => payload.data)));
+    const errors = [];
+    fallback.forEach((result, index) => {
+      const code = retryCodes[index];
+      if (result.status === 'fulfilled' && isUsableFundName(result.value?.name, code)) items.push(result.value);
+      else errors.push({
+        code,
+        message: result.reason?.message || batchErrors.find(item => item.code === code)?.message || '名称识别失败'
+      });
+    });
+    return { items, errors };
+  } catch {
+    const settled = await Promise.allSettled(list.map(code => fetchJson(`/api/name/${code}`, 7000).then(payload => payload.data)));
+    const items = [];
+    const errors = [];
+    settled.forEach((result, index) => {
+      const code = list[index];
+      if (result.status === 'fulfilled' && isUsableFundName(result.value?.name, code)) items.push(result.value);
+      else errors.push({ code, message: result.reason?.message || '名称识别失败' });
+    });
+    return { items, errors };
   }
 }
 

@@ -1,6 +1,6 @@
 import {
   $, activateCurrentNav, cacheHistory, cacheRealtime, escapeHtml, fetchHistoryMany,
-  fetchRealtimeMany, fmt, getCachedRealtime, initializeCloud, money, num,
+  fetchFundNamesMany, fetchRealtimeMany, fmt, getCachedRealtime, initializeCloud, isUsableFundName, money, num,
   parseCodes, prefetchHistory, readLocalState, retryCloudSync, saveAndSync,
   schedulePagePrefetch, setGlobalMessage, setLoading, updateFundMeta, writeLocalState
 } from './common.js';
@@ -202,25 +202,50 @@ function collectPositionsFromInputs() {
   return positions;
 }
 
-async function recognizeNames(codes = parseCodes(readLocalState().codes), { quiet = false } = {}) {
-  if (!codes.length) {
-    setGlobalMessage(els.message, '当前没有可识别的基金代码。', 'error');
+async function recognizeNames(codes = parseCodes(readLocalState().codes), { quiet = false, background = false } = {}) {
+  const state = readLocalState();
+  const targets = parseCodes(codes.join(',')).filter(code => !isUsableFundName(state.fundMeta?.[code]?.name, code));
+  if (!targets.length) {
+    if (!quiet) setGlobalMessage(els.message, '当前基金名称均已识别。', 'success');
     return;
   }
-  setLoading(els.overlay, els.loadingText, true, `正在并行识别 ${codes.length} 只基金`);
+  if (!background) setLoading(els.overlay, els.loadingText, true, `正在并行识别 ${targets.length} 只基金名称`);
   try {
-    const { items: success, errors } = await fetchRealtimeMany(codes);
-    if (success.length) {
-      cacheRealtime(success);
-      updateFundMeta(success);
+    const names = await fetchFundNamesMany(targets);
+    const success = [...names.items];
+    const found = new Set(success.map(item => item.code));
+    const remaining = targets.filter(code => !found.has(code));
+
+    // 名称专用接口不可用时，再使用盘中行情接口兜底。
+    let realtimeErrors = [];
+    if (remaining.length) {
+      const realtime = await fetchRealtimeMany(remaining);
+      for (const item of realtime.items) {
+        if (isUsableFundName(item?.name, item?.code)) {
+          success.push(item);
+          found.add(item.code);
+        }
+      }
+      realtimeErrors = realtime.errors;
+      if (realtime.items.length) cacheRealtime(realtime.items);
     }
+
+    if (success.length) updateFundMeta(success);
     render();
-    if (!quiet || errors.length) {
-      if (errors.length) setGlobalMessage(els.message, `已识别 ${success.length} 只，${errors.length} 只暂未识别名称。`, 'error');
-      else setGlobalMessage(els.message, `基金名称识别完成，共 ${success.length} 只。`, 'success');
+    const failed = targets.filter(code => !found.has(code));
+    if (!quiet || failed.length) {
+      if (failed.length) {
+        const detail = [...names.errors, ...realtimeErrors]
+          .filter(item => failed.includes(item.code))
+          .map(item => `${item.code}：${item.message}`)
+          .join('；');
+        setGlobalMessage(els.message, `已识别 ${success.length} 只，${failed.length} 只暂未识别名称${detail ? `（${detail}）` : ''}。`, 'error');
+      } else {
+        setGlobalMessage(els.message, `基金名称识别完成，共 ${success.length} 只。`, 'success');
+      }
     }
   } finally {
-    setLoading(els.overlay, els.loadingText, false);
+    if (!background) setLoading(els.overlay, els.loadingText, false);
   }
 }
 
@@ -350,5 +375,10 @@ els.clearAll.addEventListener('click', clearAll);
 
 activateCurrentNav();
 render();
-initializeCloud({ syncStatus: els.sync, message: els.message }).then(() => render());
-schedulePagePrefetch('settings');
+initializeCloud({ syncStatus: els.sync, message: els.message }).then(async () => {
+  render();
+  const state = readLocalState();
+  const missingNames = parseCodes(state.codes).filter(code => !isUsableFundName(state.fundMeta?.[code]?.name, code));
+  if (missingNames.length) await recognizeNames(missingNames, { quiet: true, background: true });
+  schedulePagePrefetch('settings');
+});

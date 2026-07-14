@@ -1,6 +1,6 @@
 {
   "name": "fund-smart-dashboard",
-  "version": "2.5.1",
-  "feature": "holding-amount-profit-shares",
-  "settingsPage": "/settings-v251.html"
+  "version": "2.5.1-namefix1",
+  "feature": "auto-fund-name-recognition",
+  "settingsPage": "/settings.html"
 }
