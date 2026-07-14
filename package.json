@@ -1,9 +1,9 @@
 {
   "name": "fund-smart-dashboard",
-  "version": "2.5.1-modal1",
+  "version": "2.5.1-sharefix1",
   "private": true,
   "type": "module",
-  "description": "基智盘 v2.5.1 新增弹框版：设置页通过弹框新增基金，并保留自动识别基金名称。",
+  "description": "基智盘 v2.5.1 份额修正版：持有份额改用上一确认净值计算，并自动修正旧的盘中估算份额。",
   "scripts": {
     "check": "node --check public/assets/common.js && node --check public/assets/home.js && node --check public/assets/realtime.js && node --check public/assets/history.js && node --check public/assets/settings.js && node --check edge-functions/api/_shared.js && node --check edge-functions/api/_fund-data.js && node --check edge-functions/api/realtime/[code].js && node --check edge-functions/api/history/[code].js && node --check edge-functions/api/batch/realtime.js && node --check edge-functions/api/batch/history.js && node --check edge-functions/api/name/[code].js && node --check edge-functions/api/batch/names.js && node --check edge-functions/api/config.js && node --check edge-functions/api/health.js",
     "serve": "python -m http.server 4173 -d public"

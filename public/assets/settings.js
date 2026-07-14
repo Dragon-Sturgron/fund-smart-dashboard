@@ -8,7 +8,7 @@ import {
 const MAX_FUNDS = 12;
 const els = {
   newCode: $('#newFundCode'), newAmount: $('#newHoldingAmount'), newProfit: $('#newHoldingProfit'),
-  openAdd: $('#openAddModalBtn'), add: $('#addFundsBtn'), closeAdd: $('#closeAddModalBtn'), cancelAdd: $('#cancelAddModalBtn'),
+  openAdd: $('#openAddModalBtn'), add: $('#addFundsBtn'), addContinue: $('#addAndContinueBtn'), closeAdd: $('#closeAddModalBtn'), cancelAdd: $('#cancelAddModalBtn'),
   addModal: $('#addFundModal'), addModalMessage: $('#addModalMessage'), recognize: $('#recognizeBtn'), syncNow: $('#syncNowBtn'),
   sync: $('#syncStatus'), message: $('#globalMessage'), body: $('#settingsBody'),
   mobile: $('#mobileSettingsCards'), saveAll: $('#saveAllBtn'), clearAll: $('#clearAllBtn'),
@@ -96,7 +96,7 @@ function calculationNav(position) {
   return num(position.costNav, 0);
 }
 
-function calculatePosition(holdingAmount, holdingProfit, nav, previous = {}) {
+function calculatePosition(holdingAmount, holdingProfit, nav, previous = {}, quoteMeta = {}) {
   const amount = num(holdingAmount, 0);
   const profit = num(holdingProfit, 0);
   const usedNav = num(nav, 0);
@@ -111,7 +111,9 @@ function calculatePosition(holdingAmount, holdingProfit, nav, previous = {}) {
     navAtCalculation: usedNav > 0 ? Number(usedNav.toFixed(6)) : '',
     principal: principal > 0 ? Number(principal.toFixed(2)) : '',
     costNav: costNav > 0 ? Number(costNav.toFixed(6)) : '',
-    calculatedAt: new Date().toISOString()
+    calculatedAt: new Date().toISOString(),
+    shareBasis: quoteMeta.shareBasis || previous.shareBasis || '',
+    navSource: quoteMeta.navSource || previous.navSource || ''
   };
 }
 
@@ -132,7 +134,7 @@ function shareMarkup(position) {
   const shares = num(position.shares, 0);
   const nav = calculationNav(position);
   if (!(shares > 0)) return '<span class="muted">待计算</span>';
-  return `<div class="calculated-share"><b>${fmt(shares, 4)}</b><small>按净值 ${fmt(nav, 4)}</small></div>`;
+  return `<div class="calculated-share"><b>${fmt(shares, 4)}</b><small>按确认净值 ${fmt(nav, 4)}</small></div>`;
 }
 
 function render() {
@@ -277,18 +279,34 @@ async function recognizeNames(codes = parseCodes(readLocalState().codes), { quie
 }
 
 async function resolveFundQuote(code) {
+  // 持有金额在基金平台盘中通常仍按“上一确认净值”展示。
+  // 盘中估算净值会不断变化，不能用于反推固定持有份额。
   const realtime = await fetchRealtimeMany([code]);
   const live = realtime.items[0];
   if (live) {
     cacheRealtime([live]);
-    const nav = num(live.estimatedNav, 0) || num(live.previousNav, 0);
-    if (nav > 0) return { nav, item: live, source: live.source || '盘中估算' };
+    const confirmedNav = num(live.previousNav, 0);
+    if (confirmedNav > 0) {
+      return {
+        nav: confirmedNav,
+        item: live,
+        source: '上一确认净值',
+        shareBasis: 'confirmed-nav'
+      };
+    }
   }
 
   const cached = getCachedRealtime([code])[0];
   if (cached) {
-    const nav = num(cached.estimatedNav, 0) || num(cached.previousNav, 0);
-    if (nav > 0) return { nav, item: cached, source: '本机行情缓存' };
+    const confirmedNav = num(cached.previousNav, 0);
+    if (confirmedNav > 0) {
+      return {
+        nav: confirmedNav,
+        item: cached,
+        source: '本机缓存的上一确认净值',
+        shareBasis: 'confirmed-nav'
+      };
+    }
   }
 
   const history = await fetchHistoryMany([code]);
@@ -296,14 +314,19 @@ async function resolveFundQuote(code) {
   const latest = item?.history?.at(-1);
   if (item && num(latest?.nav, 0) > 0) {
     cacheHistory([item]);
-    return { nav: num(latest.nav), item, source: item.source || '最新正式净值' };
+    return {
+      nav: num(latest.nav),
+      item,
+      source: '最新正式净值',
+      shareBasis: 'confirmed-nav'
+    };
   }
 
-  const message = realtime.errors[0]?.message || history.errors[0]?.message || '无法获取可用于计算份额的净值';
+  const message = realtime.errors[0]?.message || history.errors[0]?.message || '无法获取可用于计算份额的确认净值';
   throw new Error(message);
 }
 
-async function addFund() {
+async function addFund({ keepOpen = false } = {}) {
   const code = String(els.newCode.value || '').trim();
   const amountRaw = els.newAmount.value;
   const profitRaw = els.newProfit.value;
@@ -334,29 +357,87 @@ async function addFund() {
     return;
   }
 
-  setLoading(els.overlay, els.loadingText, true, `正在读取基金 ${code} 的最新净值`);
+  setLoading(els.overlay, els.loadingText, true, `正在读取基金 ${code} 的确认净值`);
   try {
     const quote = await resolveFundQuote(code);
     const codes = existing.includes(code) ? existing : [...existing, code];
     const positions = { ...(state.positions || {}) };
-    positions[code] = calculatePosition(amount, profit, quote.nav, positionFor(state, code));
+    positions[code] = calculatePosition(amount, profit, quote.nav, positionFor(state, code), { shareBasis: quote.shareBasis, navSource: quote.source });
     saveAndSync({ codes: codes.join('\n'), positions });
     updateFundMeta([{ ...quote.item, code }]);
 
     clearAddForm();
-    closeAddModal();
     render();
     const shares = num(positions[code].shares, 0);
-    setGlobalMessage(
-      els.message,
-      `${existing.includes(code) ? '已更新' : '已添加'}基金 ${code}，按净值 ${fmt(quote.nav, 4)} 计算持有份额 ${fmt(shares, 4)}；基金代码将同步到 KV。`,
-      'success'
-    );
+    const actionText = existing.includes(code) ? '已更新' : '已添加';
+    const successText = `${actionText}基金 ${code}，按${quote.source} ${fmt(quote.nav, 4)} 计算持有份额 ${fmt(shares, 4)}；基金代码将同步到 KV。`;
+    setGlobalMessage(els.message, successText, 'success');
+
+    if (keepOpen) {
+      const reachedLimit = codes.length >= MAX_FUNDS;
+      setGlobalMessage(
+        els.addModalMessage,
+        reachedLimit ? `${successText} 当前已达到 ${MAX_FUNDS} 只基金上限。` : `${successText} 可继续填写下一只基金。`,
+        'success'
+      );
+      requestAnimationFrame(() => els.newCode.focus());
+    } else {
+      closeAddModal();
+    }
     prefetchHistory([code]);
   } catch (error) {
-    setGlobalMessage(els.addModalMessage, `添加失败：${error.message}。未取得净值时不会生成错误的持有份额。`, 'error');
+    setGlobalMessage(els.addModalMessage, `添加失败：${error.message}。未取得确认净值时不会生成错误的持有份额。`, 'error');
   } finally {
     setLoading(els.overlay, els.loadingText, false);
+  }
+}
+
+async function repairLegacyShareCalculations() {
+  const state = readLocalState();
+  const codes = parseCodes(state.codes).filter(code => {
+    const position = positionFor(state, code);
+    return num(position.holdingAmount, 0) > 0
+      && num(position.shares, 0) > 0
+      && position.shareBasis !== 'confirmed-nav';
+  });
+  if (!codes.length) return;
+
+  const positions = { ...(state.positions || {}) };
+  const repaired = [];
+  const failed = [];
+
+  await Promise.all(codes.map(async code => {
+    try {
+      const quote = await resolveFundQuote(code);
+      const previous = positionFor(state, code);
+      positions[code] = calculatePosition(
+        previous.holdingAmount,
+        previous.holdingProfit,
+        quote.nav,
+        previous,
+        { shareBasis: quote.shareBasis, navSource: quote.source }
+      );
+      repaired.push(code);
+    } catch (error) {
+      failed.push({ code, message: error.message });
+    }
+  }));
+
+  if (repaired.length) {
+    writeLocalState({ positions });
+    render();
+    setGlobalMessage(
+      els.message,
+      `已按上一确认净值自动修正 ${repaired.length} 只基金的持有份额。`,
+      'success'
+    );
+  }
+  if (failed.length && !repaired.length) {
+    setGlobalMessage(
+      els.message,
+      `暂时无法修正份额：${failed.map(item => `${item.code}：${item.message}`).join('；')}`,
+      'error'
+    );
   }
 }
 
@@ -391,7 +472,8 @@ function clearAll() {
 els.openAdd.addEventListener('click', openAddModal);
 els.closeAdd.addEventListener('click', closeAddModal);
 els.cancelAdd.addEventListener('click', closeAddModal);
-els.add.addEventListener('click', addFund);
+els.add.addEventListener('click', () => addFund());
+els.addContinue.addEventListener('click', () => addFund({ keepOpen: true }));
 els.recognize.addEventListener('click', () => recognizeNames());
 els.syncNow.addEventListener('click', retryCloudSync);
 els.saveAll.addEventListener('click', saveAll);
@@ -412,5 +494,6 @@ initializeCloud({ syncStatus: els.sync, message: els.message }).then(async () =>
   const state = readLocalState();
   const missingNames = parseCodes(state.codes).filter(code => !isUsableFundName(state.fundMeta?.[code]?.name, code));
   if (missingNames.length) await recognizeNames(missingNames, { quiet: true, background: true });
+  await repairLegacyShareCalculations();
   schedulePagePrefetch('settings');
 });

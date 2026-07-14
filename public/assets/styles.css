@@ -234,7 +234,7 @@ footer { padding: 22px 10px 0; text-align: center; color: #8c96a7; font-size: 12
   h1 { font-size: 31px; }
 }
 
-/* v2.5.1-modal1: 设置页新增基金弹框 */
+/* v2.5.1-modal2: 设置页连续新增基金弹框 */
 .settings-tools { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 12px 0 14px; padding: 11px 13px; border: 1px solid #e5eaf3; border-radius: 13px; background: rgba(248,250,254,.86); }
 .settings-tools-actions { display: flex; flex-wrap: wrap; gap: 8px; flex: 0 0 auto; }
 .compact-sync-line { margin: 0; justify-content: flex-end; min-width: 0; }
@@ -249,7 +249,7 @@ body.modal-open { overflow: hidden; }
 .modal-close { width: 38px; height: 38px; flex: 0 0 auto; border: 1px solid #e1e6ef; border-radius: 12px; color: #657188; background: #f7f9fc; font-size: 25px; line-height: 1; cursor: pointer; transition: .18s ease; }
 .modal-close:hover { color: var(--red); background: var(--red-soft); border-color: #ffd4d2; }
 .modal-form { display: grid; gap: 14px; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.modal-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
 .modal-actions .btn-primary { order: 0; grid-column: auto; }
 @keyframes modalEnter { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: none; } }
 
@@ -258,9 +258,9 @@ body.modal-open { overflow: hidden; }
   .settings-tools-actions { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); }
   .compact-sync-line { align-items: flex-start; justify-content: flex-start; }
   .modal-card { padding: 20px; border-radius: 19px; }
-  .modal-actions { display: grid; grid-template-columns: 1fr 1.35fr; }
+  .modal-actions { display: grid; grid-template-columns: 1fr 1fr; }
   .modal-actions .btn { width: 100%; }
-  .modal-actions .btn-primary { order: 0; grid-column: auto; }
+  .modal-actions .btn-primary { order: 0; grid-column: 1 / -1; }
 }
 .loading-overlay { z-index: 140; }
 .modal-card .global-message { margin-top: 14px; }
