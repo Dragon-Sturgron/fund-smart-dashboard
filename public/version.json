@@ -1,6 +1,6 @@
 {
   "name": "fund-smart-dashboard",
-  "version": "2.5.1-sharefix1",
-  "feature": "confirmed-nav-share-calculation-and-auto-repair",
+  "version": "2.5.1-round2",
+  "feature": "confirmed-nav-share-round-half-up-2-decimals",
   "settingsPage": "/settings.html"
 }

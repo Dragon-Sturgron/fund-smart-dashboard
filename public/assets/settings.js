@@ -47,13 +47,20 @@ function hasInputValue(value) {
   return value !== '' && value !== null && value !== undefined && Number.isFinite(Number(value));
 }
 
+function roundHalfUp(value, digits = 2) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  const factor = 10 ** digits;
+  return Math.round((number + Number.EPSILON) * factor) / factor;
+}
+
 function normalizePosition(raw = {}) {
   if (hasInputValue(raw.holdingAmount) || hasInputValue(raw.shares)) {
     return {
       ...raw,
       holdingAmount: raw.holdingAmount ?? '',
       holdingProfit: raw.holdingProfit ?? '',
-      shares: raw.shares ?? '',
+      shares: num(raw.shares, 0) > 0 ? roundHalfUp(num(raw.shares, 0), 2) : '',
       navAtCalculation: raw.navAtCalculation ?? ''
     };
   }
@@ -61,7 +68,7 @@ function normalizePosition(raw = {}) {
   // 兼容旧版“成本净值 + 投入本金”数据，避免升级后直接丢失。
   const principal = num(raw.principal, 0);
   const costNav = num(raw.costNav, 0);
-  const shares = principal > 0 && costNav > 0 ? principal / costNav : 0;
+  const shares = principal > 0 && costNav > 0 ? roundHalfUp(principal / costNav, 2) : 0;
   return {
     ...raw,
     holdingAmount: principal > 0 ? principal : '',
@@ -100,14 +107,14 @@ function calculatePosition(holdingAmount, holdingProfit, nav, previous = {}, quo
   const amount = num(holdingAmount, 0);
   const profit = num(holdingProfit, 0);
   const usedNav = num(nav, 0);
-  const shares = amount > 0 && usedNav > 0 ? amount / usedNav : 0;
+  const shares = amount > 0 && usedNav > 0 ? roundHalfUp(amount / usedNav, 2) : 0;
   const principal = amount - profit;
   const costNav = shares > 0 && principal > 0 ? principal / shares : 0;
   return {
     ...previous,
     holdingAmount: amount > 0 ? Number(amount.toFixed(2)) : '',
     holdingProfit: hasInputValue(holdingProfit) ? Number(profit.toFixed(2)) : '',
-    shares: shares > 0 ? Number(shares.toFixed(6)) : '',
+    shares: shares > 0 ? roundHalfUp(shares, 2) : '',
     navAtCalculation: usedNav > 0 ? Number(usedNav.toFixed(6)) : '',
     principal: principal > 0 ? Number(principal.toFixed(2)) : '',
     costNav: costNav > 0 ? Number(costNav.toFixed(6)) : '',
@@ -134,7 +141,7 @@ function shareMarkup(position) {
   const shares = num(position.shares, 0);
   const nav = calculationNav(position);
   if (!(shares > 0)) return '<span class="muted">待计算</span>';
-  return `<div class="calculated-share"><b>${fmt(shares, 4)}</b><small>按确认净值 ${fmt(nav, 4)}</small></div>`;
+  return `<div class="calculated-share"><b>${fmt(shares, 2)}</b><small>按确认净值 ${fmt(nav, 4)}</small></div>`;
 }
 
 function render() {
@@ -370,7 +377,7 @@ async function addFund({ keepOpen = false } = {}) {
     render();
     const shares = num(positions[code].shares, 0);
     const actionText = existing.includes(code) ? '已更新' : '已添加';
-    const successText = `${actionText}基金 ${code}，按${quote.source} ${fmt(quote.nav, 4)} 计算持有份额 ${fmt(shares, 4)}；基金代码将同步到 KV。`;
+    const successText = `${actionText}基金 ${code}，按${quote.source} ${fmt(quote.nav, 4)} 计算持有份额 ${fmt(shares, 2)}；基金代码将同步到 KV。`;
     setGlobalMessage(els.message, successText, 'success');
 
     if (keepOpen) {
@@ -390,6 +397,27 @@ async function addFund({ keepOpen = false } = {}) {
   } finally {
     setLoading(els.overlay, els.loadingText, false);
   }
+}
+
+function normalizeStoredSharePrecision() {
+  const state = readLocalState();
+  const positions = { ...(state.positions || {}) };
+  let changed = false;
+
+  for (const code of parseCodes(state.codes)) {
+    const current = positions[code];
+    if (!current) continue;
+    const shares = num(current.shares, 0);
+    if (!(shares > 0)) continue;
+    const rounded = roundHalfUp(shares, 2);
+    if (shares !== rounded) {
+      positions[code] = { ...current, shares: rounded };
+      changed = true;
+    }
+  }
+
+  if (changed) writeLocalState({ positions });
+  return changed;
 }
 
 async function repairLegacyShareCalculations() {
@@ -488,6 +516,7 @@ document.addEventListener('keydown', event => {
 });
 
 activateCurrentNav();
+normalizeStoredSharePrecision();
 render();
 initializeCloud({ syncStatus: els.sync, message: els.message }).then(async () => {
   render();
