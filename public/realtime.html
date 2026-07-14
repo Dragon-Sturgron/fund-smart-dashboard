@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#f4f7fd" /><meta name="description" content="查看基金盘中估算实时行情。" />
-  <title>实时行情｜基智盘</title><link rel="stylesheet" href="/assets/styles.css?v=2.4.0" />
-  <link rel="modulepreload" href="/assets/common.js?v=2.4.0" />
+  <title>实时行情｜基智盘</title><link rel="stylesheet" href="/assets/styles.css?v=2.4.1" />
+  <link rel="modulepreload" href="/assets/common.js?v=2.4.1" />
   <link rel="prefetch" href="/realtime.html" />
   <link rel="prefetch" href="/history.html" />
 </head>
@@ -32,11 +32,11 @@
       </div>
       <div id="globalMessage" class="global-message results-message" role="status"></div>
       <p class="table-note">红色表示上涨，绿色表示下跌。</p>
-      <div class="table-wrap"><table class="data-table"><thead><tr><th>基金</th><th>估算涨跌</th><th>估算净值</th><th>上一净值</th><th>更新时间</th><th>数据来源</th><th>当日状态</th><th>操作</th></tr></thead><tbody id="realtimeBody"><tr><td colspan="8" class="table-empty">请先在“设置”页添加基金代码。</td></tr></tbody></table></div><div id="mobileRealtimeCards" class="mobile-cards"></div>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>基金</th><th>估算涨跌</th><th>估算净值</th><th>上一净值</th><th>数据来源</th><th>当日状态</th></tr></thead><tbody id="realtimeBody"><tr><td colspan="6" class="table-empty">请先在“设置”页添加基金代码。</td></tr></tbody></table></div><div id="mobileRealtimeCards" class="mobile-cards"></div>
     </section>
     <footer><p>实时估算根据公开持仓和盘中行情计算，主动基金调仓后可能与晚间正式净值存在偏差。</p></footer>
   </main>
   <div id="loadingOverlay" class="loading-overlay" hidden><div class="loader-card"><div class="spinner"></div><strong>正在拉取实时行情</strong><span id="loadingText">请稍候</span></div></div>
-  <script type="module" src="/assets/realtime.js?v=2.4.0"></script>
+  <script type="module" src="/assets/realtime.js?v=2.4.1"></script>
 </body>
 </html>

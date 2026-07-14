@@ -38,7 +38,7 @@ function sourceText(item) {
 
 function renderTable(errors = []) {
   if (!currentRows.length && !errors.length) {
-    els.body.innerHTML = '<tr><td colspan="8" class="table-empty">请先在“设置”页添加基金代码。</td></tr>';
+    els.body.innerHTML = '<tr><td colspan="6" class="table-empty">请先在“设置”页添加基金代码。</td></tr>';
     els.mobile.innerHTML = '<div class="empty-mobile-card">尚未添加基金，前往<a href="/settings.html">设置页</a>添加。</div>';
     return;
   }
@@ -48,19 +48,16 @@ function renderTable(errors = []) {
       <td><div class="change ${changeClass(item.estimatedRate)}">${pct(item.estimatedRate)}</div></td>
       <td><b>${fmt(item.estimatedNav, 4)}</b><div class="fund-code">估算净值</div></td>
       <td><b>${fmt(item.previousNav, 4)}</b><div class="fund-code">上一确认净值</div></td>
-      <td>${escapeHtml(item.time || '--')}</td>
       <td><span class="source-tag">${escapeHtml(sourceText(item))}</span></td>
       <td>${item.estimatedRate >= 2 ? '<span class="signal-pill sell">涨幅偏快</span>' : item.estimatedRate <= -2 ? '<span class="signal-pill buy">跌幅较大</span>' : '<span class="signal-pill hold">正常波动</span>'}</td>
-      <td><a class="text-link" href="/history.html#${item.code}">查看历史分析</a></td>
     </tr>`).join('');
-  const errorRows = errors.map(item => `<tr class="error-row"><td><div class="fund-code">${item.code}</div></td><td colspan="7"><span class="error-text">${escapeHtml(item.message)}</span></td></tr>`).join('');
+  const errorRows = errors.map(item => `<tr class="error-row"><td><div class="fund-code">${item.code}</div></td><td colspan="5"><span class="error-text">${escapeHtml(item.message)}</span></td></tr>`).join('');
   els.body.innerHTML = rows + errorRows;
   els.mobile.innerHTML = currentRows.map(item => `
     <article class="mobile-fund-card">
       <div class="mobile-card-head"><div><div class="fund-name">${escapeHtml(item.name)}</div><div class="fund-code">${item.code}</div></div><div class="change ${changeClass(item.estimatedRate)}">${pct(item.estimatedRate)}</div></div>
-      <div class="mobile-card-grid"><div class="mobile-metric"><span>估算净值</span><b>${fmt(item.estimatedNav, 4)}</b></div><div class="mobile-metric"><span>上一净值</span><b>${fmt(item.previousNav, 4)}</b></div><div class="mobile-metric"><span>估算时间</span><b>${escapeHtml(item.time || '--')}</b></div><div class="mobile-metric"><span>状态</span><b>${item.estimatedRate >= 2 ? '涨幅偏快' : item.estimatedRate <= -2 ? '跌幅较大' : '正常波动'}</b></div></div>
+      <div class="mobile-card-grid"><div class="mobile-metric"><span>估算净值</span><b>${fmt(item.estimatedNav, 4)}</b></div><div class="mobile-metric"><span>上一净值</span><b>${fmt(item.previousNav, 4)}</b></div><div class="mobile-metric"><span>状态</span><b>${item.estimatedRate >= 2 ? '涨幅偏快' : item.estimatedRate <= -2 ? '跌幅较大' : '正常波动'}</b></div></div>
       <div class="mobile-action"><b>数据性质</b><p>${escapeHtml(sourceText(item))}</p></div>
-      <a class="btn btn-light full-btn" href="/history.html#${item.code}">查看历史分析</a>
     </article>`).join('');
 }
 
@@ -100,7 +97,7 @@ async function refreshRealtime({ silent = false } = {}) {
   }
   setRefreshBusy(true);
   if (!silent && !currentRows.length) {
-    els.body.innerHTML = `<tr><td colspan="8" class="table-empty">正在并行读取 ${codes.length} 只基金，结果会一次返回……</td></tr>`;
+    els.body.innerHTML = `<tr><td colspan="6" class="table-empty">正在并行读取 ${codes.length} 只基金，结果会一次返回……</td></tr>`;
   }
   try {
     const { items, errors } = await fetchRealtimeMany(codes);
