@@ -1,13 +1,13 @@
 import {
-  $, activateCurrentNav, clamp, escapeHtml, fetchHistory, fmt, initializeCloud,
-  num, parseCodes, pct, readLocalState, retryCloudSync, saveAndSync, setGlobalMessage,
-  setLoading, updateFundMeta
+  $, activateCurrentNav, cacheHistory, clamp, escapeHtml, fetchHistoryMany, fmt,
+  getCachedHistory, initializeCloud, num, parseCodes, pct, readLocalState,
+  schedulePagePrefetch, writeLocalState, setGlobalMessage, updateFundMeta
 } from './common.js';
 
 const els = {
   risk: $('#riskLevel'), target: $('#targetReturn'), refresh: $('#refreshBtn'),
   body: $('#historyBody'), mobile: $('#mobileHistoryCards'), message: $('#globalMessage'),
-  overlay: $('#loadingOverlay'), loadingText: $('#loadingText'), sync: $('#syncStatus'), syncNow: $('#syncNowBtn'),
+  overlay: $('#loadingOverlay'), loadingText: $('#loadingText'),
   summary: $('#savedFundSummary'), statTotal: $('#statTotal'), statBuy: $('#statBuy'), statWait: $('#statWait'),
   statSell: $('#statSell'), statTime: $('#statTime'), marketStatus: $('#marketStatus'), marketSummary: $('#marketSummary')
 };
@@ -19,6 +19,8 @@ const riskProfiles = {
 };
 
 let currentFunds = [];
+let refreshing = false;
+let queuedRefresh = false;
 
 function average(values) {
   const valid = values.filter(Number.isFinite);
@@ -41,6 +43,10 @@ function getSavedCodes() {
   const hashCode = location.hash.replace('#', '');
   return /^\d{6}$/.test(hashCode) && !codes.includes(hashCode) ? [hashCode, ...codes].slice(0, 12) : codes;
 }
+function orderByCodes(items, codes = getSavedCodes()) {
+  const order = new Map(codes.map((code, index) => [code, index]));
+  return [...items].sort((a, b) => (order.get(a.code) ?? 99) - (order.get(b.code) ?? 99));
+}
 function renderSavedSummary() {
   const state = readLocalState();
   const codes = getSavedCodes();
@@ -62,7 +68,7 @@ function loadControls() {
   renderSavedSummary();
 }
 function saveControls(extra = {}) {
-  return saveAndSync({
+  return writeLocalState({
     risk: els.risk.value,
     target: Math.max(1, num(els.target.value, 20)),
     ...extra
@@ -187,7 +193,7 @@ function renderResults(errors = []) {
     const a = fund.action;
     return `<tr>
       <td><span class="signal-pill ${a.tone}">${a.signal}</span></td>
-      <td><div class="fund-name">${escapeHtml(fund.name)}</div><div class="fund-code">${fund.code}</div><span class="source-tag">正式历史净值</span></td>
+      <td><div class="fund-name">${escapeHtml(fund.name)}</div><div class="fund-code">${fund.code}</div><span class="source-tag">${fund._fromCache ? '本机秒开缓存 · 正式历史净值' : '正式历史净值'}</span></td>
       <td><b>${fmt(m.current, 4)}</b><div class="change ${m.dailyChange > 0 ? 'up' : m.dailyChange < 0 ? 'down' : 'flat'}">${pct(m.dailyChange)}</div></td>
       <td><div class="action-title">${a.title}</div><div class="action-detail">${a.detail}</div></td>
       <td><div class="score-stack">${renderScore('买入 B', s.B)}${renderScore('卖出 S', s.S)}</div></td>
@@ -230,43 +236,77 @@ function renderAll(errors = []) {
   renderResults(errors);
   renderSummary();
 }
-async function refreshHistory() {
+function setRefreshBusy(busy) {
+  refreshing = busy;
+  els.refresh.disabled = busy;
+  els.refresh.textContent = busy ? '并行计算中…' : '计算历史信号';
+}
+
+async function refreshHistory({ silent = false } = {}) {
+  if (refreshing) { queuedRefresh = true; return; }
   const codes = getSavedCodes();
   if (!codes.length) {
     setGlobalMessage(els.message, '尚未添加基金，请先进入设置页添加基金代码。', 'error');
+    renderAll();
     return;
   }
   saveControls();
   renderSavedSummary();
-  setLoading(els.overlay, els.loadingText, true, `准备读取 ${codes.length} 只基金的历史净值`);
-  const funds = [];
-  const errors = [];
-  for (let index = 0; index < codes.length; index += 1) {
-    const code = codes[index];
-    els.loadingText.textContent = `正在读取 ${index + 1}/${codes.length}：${code}`;
-    try {
-      const raw = await fetchHistory(code);
-      funds.push(buildFund(raw));
-    } catch (error) {
-      errors.push({ code, message: error.message || '加载失败' });
-    }
+  setRefreshBusy(true);
+  if (!silent && !currentFunds.length) {
+    els.body.innerHTML = `<tr><td colspan="9" class="table-empty">正在并行读取 ${codes.length} 只基金的历史净值……</td></tr>`;
   }
-  currentFunds = funds;
-  updateFundMeta(funds);
-  saveAndSync({ fundMeta: readLocalState().fundMeta });
-  renderAll(errors);
-  if (errors.length) setGlobalMessage(els.message, `部分基金加载失败：${errors.map(item => `${item.code}：${item.message}`).join('；')}`, 'error');
-  else setGlobalMessage(els.message, `历史信号计算完成，共 ${funds.length} 只。`, 'success');
-  setLoading(els.overlay, els.loadingText, false);
+  try {
+    const { items, errors } = await fetchHistoryMany(codes);
+    if (items.length) {
+      cacheHistory(items);
+      const fresh = new Map(items.map(item => [item.code, buildFund(item)]));
+      const retained = currentFunds.filter(fund => codes.includes(fund.code) && !fresh.has(fund.code));
+      currentFunds = orderByCodes([...fresh.values(), ...retained], codes);
+      updateFundMeta(items);
+    }
+    renderAll(errors);
+    if (errors.length) setGlobalMessage(els.message, `已并行完成，${items.length} 只成功，${errors.length} 只失败。`, 'error');
+    else setGlobalMessage(els.message, `历史信号已并行计算完成，共 ${items.length} 只。`, 'success');
+  } finally {
+    setRefreshBusy(false);
+    if (queuedRefresh) { queuedRefresh = false; queueMicrotask(() => refreshHistory({ silent: true })); }
+  }
 }
 
-els.refresh.addEventListener('click', refreshHistory);
-els.risk.addEventListener('change', () => { saveControls(); if (currentFunds.length) { currentFunds = currentFunds.map(fund => buildFund({ code: fund.code, name: fund.name, history: fund.history, source: fund.source })); renderAll(); } });
-els.target.addEventListener('change', () => { saveControls(); if (currentFunds.length) { currentFunds = currentFunds.map(fund => buildFund({ code: fund.code, name: fund.name, history: fund.history, source: fund.source })); renderAll(); } });
-els.syncNow.addEventListener('click', retryCloudSync);
+function showCacheImmediately() {
+  const codes = getSavedCodes();
+  const cached = orderByCodes(getCachedHistory(codes), codes);
+  if (!cached.length) return false;
+  const valid = [];
+  for (const raw of cached) {
+    try { valid.push(buildFund(raw)); } catch {}
+  }
+  if (!valid.length) return false;
+  currentFunds = valid;
+  renderAll();
+  setGlobalMessage(els.message, `已秒开显示 ${valid.length} 只历史分析缓存，正在后台并行校准。`, 'success');
+  return true;
+}
+
+els.refresh.addEventListener('click', () => refreshHistory());
+els.risk.addEventListener('change', () => { saveControls(); if (currentFunds.length) { currentFunds = currentFunds.map(fund => buildFund({ code: fund.code, name: fund.name, history: fund.history, source: fund.source, _fromCache: fund._fromCache, _cachedAt: fund._cachedAt })); renderAll(); } });
+els.target.addEventListener('change', () => { saveControls(); if (currentFunds.length) { currentFunds = currentFunds.map(fund => buildFund({ code: fund.code, name: fund.name, history: fund.history, source: fund.source, _fromCache: fund._fromCache, _cachedAt: fund._cachedAt })); renderAll(); } });
 
 activateCurrentNav();
-await initializeCloud({ syncStatus: els.sync, message: els.message });
 loadControls();
-if (getSavedCodes().length) refreshHistory();
+const localSignature = getSavedCodes().join(',');
+const hadCache = showCacheImmediately();
+if (getSavedCodes().length) refreshHistory({ silent: hadCache });
 else renderAll();
+
+// 云端基金代码在后台读取，不阻塞首屏和本机缓存计算。
+initializeCloud({ message: els.message }).then(() => {
+  loadControls();
+  const cloudSignature = getSavedCodes().join(',');
+  if (cloudSignature !== localSignature) {
+    const cloudHadCache = showCacheImmediately();
+    refreshHistory({ silent: cloudHadCache });
+  }
+});
+schedulePagePrefetch('history');

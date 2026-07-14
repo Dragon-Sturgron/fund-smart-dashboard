@@ -1,11 +1,11 @@
 {
   "name": "fund-smart-dashboard",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "private": true,
   "type": "module",
-  "description": "基智盘：适配 EdgeOne Makers 的实时行情、历史分析与本机持仓设置；KV 仅同步基金代码。",
+  "description": "基智盘：EdgeOne 并行批量接口、缓存秒开、实时行情、历史分析与本机持仓；KV 仅同步基金代码。",
   "scripts": {
-    "check": "node --check public/assets/common.js && node --check public/assets/home.js && node --check public/assets/realtime.js && node --check public/assets/history.js && node --check public/assets/settings.js && node --check edge-functions/api/_shared.js && node --check edge-functions/api/realtime/[code].js && node --check edge-functions/api/history/[code].js && node --check edge-functions/api/config.js && node --check edge-functions/api/health.js",
+    "check": "node --check public/assets/common.js && node --check public/assets/home.js && node --check public/assets/realtime.js && node --check public/assets/history.js && node --check public/assets/settings.js && node --check edge-functions/api/_shared.js && node --check edge-functions/api/_fund-data.js && node --check edge-functions/api/realtime/[code].js && node --check edge-functions/api/history/[code].js && node --check edge-functions/api/batch/realtime.js && node --check edge-functions/api/batch/history.js && node --check edge-functions/api/config.js && node --check edge-functions/api/health.js",
     "serve": "python -m http.server 4173 -d public"
   }
 }

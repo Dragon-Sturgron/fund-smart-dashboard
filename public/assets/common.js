@@ -1,5 +1,89 @@
 const STORAGE_KEY = 'fund-smart-dashboard-v2';
+const DATA_CACHE_KEY = 'fund-smart-dashboard-data-cache-v1';
 const MAX_FUNDS = 12;
+const REALTIME_CACHE_MAX_AGE = 10 * 60 * 1000;
+const HISTORY_CACHE_MAX_AGE = 12 * 60 * 60 * 1000;
+
+function readDataCache() {
+  try {
+    const value = JSON.parse(localStorage.getItem(DATA_CACHE_KEY) || '{}');
+    return value && typeof value === 'object' ? value : {};
+  } catch { return {}; }
+}
+
+function writeDataCache(cache) {
+  try {
+    localStorage.setItem(DATA_CACHE_KEY, JSON.stringify(cache));
+    return;
+  } catch {}
+  // 容量不足时缩短历史序列后重试，仍保留至少一年以上的数据。
+  try {
+    const compact = { ...cache, history: { ...(cache.history || {}) } };
+    for (const [code, entry] of Object.entries(compact.history)) {
+      compact.history[code] = { ...entry, data: { ...entry.data, history: (entry.data?.history || []).slice(-420) } };
+    }
+    localStorage.setItem(DATA_CACHE_KEY, JSON.stringify(compact));
+  } catch {}
+}
+
+export function getCachedRealtime(codes = []) {
+  const cache = readDataCache().realtime || {};
+  return codes.map(code => cache[code]).filter(Boolean).map(entry => ({
+    ...entry.data, _fromCache: true, _cachedAt: entry.cachedAt
+  }));
+}
+
+export function cacheRealtime(items = []) {
+  if (!items.length) return;
+  const cache = readDataCache();
+  cache.realtime = { ...(cache.realtime || {}) };
+  const cachedAt = Date.now();
+  for (const item of items) if (item?.code) cache.realtime[item.code] = { cachedAt, data: item };
+  writeDataCache(cache);
+}
+
+export function getCachedHistory(codes = []) {
+  const cache = readDataCache().history || {};
+  return codes.map(code => cache[code]).filter(Boolean).map(entry => ({
+    ...entry.data, _fromCache: true, _cachedAt: entry.cachedAt
+  }));
+}
+
+export function cacheHistory(items = []) {
+  if (!items.length) return;
+  const cache = readDataCache();
+  cache.history = { ...(cache.history || {}) };
+  const cachedAt = Date.now();
+  for (const item of items) {
+    if (!item?.code) continue;
+    cache.history[item.code] = { cachedAt, data: { ...item, history: (item.history || []).slice(-800) } };
+  }
+  writeDataCache(cache);
+}
+
+function cacheIsFresh(kind, codes, maxAge) {
+  const bucket = readDataCache()[kind] || {};
+  const now = Date.now();
+  return codes.length > 0 && codes.every(code => bucket[code] && now - Number(bucket[code].cachedAt || 0) <= maxAge);
+}
+
+async function fetchJson(url, timeoutMs = 7000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      cache: 'default',
+      signal: controller.signal
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.message || `接口返回 ${response.status}`);
+    return payload;
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error('接口响应超时');
+    throw error;
+  } finally { clearTimeout(timer); }
+}
 
 export const $ = (selector, root = document) => root.querySelector(selector);
 export const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -36,7 +120,7 @@ export function readLocalState() {
     try {
       const old = JSON.parse(localStorage.getItem(oldKey) || '{}');
       if (old && typeof old === 'object' && (old.codes || old.positions)) {
-        const migrated = { ...old, version: 3 };
+        const migrated = { ...old, version: 4 };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
         return migrated;
       }
@@ -49,7 +133,7 @@ export function writeLocalState(partial = {}) {
   const state = {
     ...readLocalState(),
     ...partial,
-    version: 3,
+    version: 4,
     localUpdatedAt: new Date().toISOString()
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -129,6 +213,10 @@ let pendingCloudState = null;
 let syncElement = null;
 let messageElement = null;
 
+function cloudStateFromLocal(state = readLocalState()) {
+  return { codes: parseCodes(state.codes).join('\n') };
+}
+
 function setSyncStatus(text, tone = 'pending') {
   if (!syncElement) return;
   syncElement.className = `sync-status ${tone}`;
@@ -156,9 +244,9 @@ async function requestCloudState(method = 'GET', state) {
 
 export function queueCloudSave(state = readLocalState()) {
   if (!cloudSyncEnabled) return;
-  pendingCloudState = state;
+  pendingCloudState = cloudStateFromLocal(state);
   clearTimeout(cloudSaveTimer);
-  setSyncStatus('等待同步到 KV', 'pending');
+  setSyncStatus('等待同步基金列表', 'pending');
   cloudSaveTimer = setTimeout(flushCloudSave, 700);
 }
 
@@ -169,17 +257,17 @@ export async function flushCloudSave() {
   while (pendingCloudState) {
     const state = pendingCloudState;
     pendingCloudState = null;
-    setSyncStatus('正在保存到 KV', 'saving');
+    setSyncStatus('正在同步基金列表', 'saving');
     try {
       const payload = await requestCloudState('PUT', state);
       const time = payload.updatedAt
         ? new Date(payload.updatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
         : '';
-      setSyncStatus(`KV 已同步${time ? ` · ${time}` : ''}`, 'synced');
+      setSyncStatus(`基金列表已同步${time ? ` · ${time}` : ''}`, 'synced');
     } catch (error) {
       pendingCloudState = state;
-      setSyncStatus('KV 同步失败，点击重试', 'error');
-      setGlobalMessage(messageElement, error.message || 'KV 同步失败，数据仍已保存在本机。', 'error');
+      setSyncStatus('基金列表同步失败，点击重试', 'error');
+      setGlobalMessage(messageElement, error.message || '基金列表同步失败；基金代码和个人持仓仍保存在本机。', 'error');
       break;
     }
   }
@@ -188,45 +276,44 @@ export async function flushCloudSave() {
 
 export function saveAndSync(partial = {}) {
   const state = writeLocalState(partial);
-  queueCloudSave(state);
+  if (Object.prototype.hasOwnProperty.call(partial, 'codes')) queueCloudSave(state);
   return state;
 }
 
 export async function initializeCloud({ syncStatus, message } = {}) {
   syncElement = syncStatus || null;
   messageElement = message || null;
-  setSyncStatus('正在连接 KV', 'saving');
+  setSyncStatus('正在读取基金列表', 'saving');
   try {
     const payload = await requestCloudState('GET');
     cloudSyncEnabled = true;
     if (payload.data) {
       const local = readLocalState();
-      // 云端优先，但保留本机可能更新过的新字段。
       const merged = {
         ...local,
-        ...payload.data,
-        fundMeta: { ...(local.fundMeta || {}), ...(payload.data.fundMeta || {}) },
-        positions: { ...(local.positions || {}), ...(payload.data.positions || {}) }
+        codes: parseCodes(payload.data.codes).join('\n'),
+        version: 4,
+        localUpdatedAt: new Date().toISOString()
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
       const time = payload.updatedAt
         ? new Date(payload.updatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
         : '';
-      setSyncStatus(`已从 KV 恢复${time ? ` · ${time}` : ''}`, 'synced');
+      setSyncStatus(`已从 KV 恢复基金列表${time ? ` · ${time}` : ''}`, 'synced');
       return merged;
     }
     const local = readLocalState();
-    if (parseCodes(local.codes).length || Object.keys(local.positions || {}).length) {
-      pendingCloudState = local;
+    if (parseCodes(local.codes).length) {
+      pendingCloudState = cloudStateFromLocal(local);
       await flushCloudSave();
     } else {
-      setSyncStatus('KV 已连接，等待保存', 'synced');
+      setSyncStatus('KV 已连接，等待添加基金', 'synced');
     }
     return local;
   } catch (error) {
     cloudSyncEnabled = false;
-    if (error.code === 'KV_NOT_BOUND') setSyncStatus('KV 未绑定，仅本机保存', 'local');
-    else setSyncStatus('KV 暂不可用，仅本机保存', 'error');
+    if (error.code === 'KV_NOT_BOUND') setSyncStatus('KV 未绑定，基金列表仅本机保存', 'local');
+    else setSyncStatus('KV 暂不可用，基金列表仅本机保存', 'error');
     return readLocalState();
   }
 }
@@ -235,7 +322,8 @@ export async function retryCloudSync() {
   if (!cloudSyncEnabled) {
     await initializeCloud({ syncStatus: syncElement, message: messageElement });
   }
-  pendingCloudState = readLocalState();
+  if (!cloudSyncEnabled) return;
+  pendingCloudState = cloudStateFromLocal(readLocalState());
   await flushCloudSave();
 }
 
@@ -305,19 +393,47 @@ export function fetchRealtimeJsonp(code) {
 }
 
 export async function fetchRealtime(code) {
+  let apiError;
+  try {
+    const payload = await fetchJson(`/api/realtime/${code}`, 4500);
+    return payload.data;
+  } catch (error) { apiError = error; }
   try {
     return await fetchRealtimeJsonp(code);
   } catch (jsonpError) {
-    try {
-      const response = await fetch(`/api/realtime/${code}?t=${Date.now()}`, { headers: { Accept: 'application/json' }, cache: 'no-store' });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload.ok) throw new Error(payload.message || `接口返回 ${response.status}`);
-      return payload.data;
-    } catch (apiError) {
-      const error = new Error(`实时数据不可用：${apiError.message || jsonpError.message}`);
-      error.details = [jsonpError.message, apiError.message].filter(Boolean);
-      throw error;
-    }
+    const error = new Error(`实时数据不可用：${jsonpError.message || apiError?.message}`);
+    error.details = [apiError?.message, jsonpError.message].filter(Boolean);
+    throw error;
+  }
+}
+
+export async function fetchRealtimeMany(codes = []) {
+  const list = parseCodes(codes.join(','));
+  if (!list.length) return { items: [], errors: [] };
+  try {
+    const payload = await fetchJson(`/api/batch/realtime?codes=${encodeURIComponent(list.join(','))}`, 6500);
+    const items = Array.isArray(payload.data) ? payload.data : [];
+    const batchErrors = Array.isArray(payload.errors) ? payload.errors : [];
+    const returned = new Set(items.map(item => item.code));
+    const retryCodes = list.filter(code => !returned.has(code));
+    if (!retryCodes.length) return { items, errors: [] };
+    const fallback = await Promise.allSettled(retryCodes.map(code => fetchRealtime(code)));
+    const errors = [];
+    fallback.forEach((result, index) => result.status === 'fulfilled'
+      ? items.push(result.value)
+      : errors.push({
+          code: retryCodes[index],
+          message: result.reason?.message || batchErrors.find(item => item.code === retryCodes[index])?.message || '加载失败'
+        }));
+    return { items, errors };
+  } catch {
+    const settled = await Promise.allSettled(list.map(code => fetchRealtime(code)));
+    const items = [];
+    const errors = [];
+    settled.forEach((result, index) => result.status === 'fulfilled'
+      ? items.push(result.value)
+      : errors.push({ code: list[index], message: result.reason?.message || '加载失败' }));
+    return { items, errors };
   }
 }
 
@@ -371,20 +487,90 @@ export function fetchHistoryJsonp(code, pageSize = 1000) {
 }
 
 export async function fetchHistory(code) {
+  let apiError;
+  try {
+    const payload = await fetchJson(`/api/history/${code}`, 8500);
+    return payload.data;
+  } catch (error) { apiError = error; }
   try {
     return await fetchHistoryJsonp(code);
   } catch (jsonpError) {
-    try {
-      const response = await fetch(`/api/history/${code}?t=${Date.now()}`, { headers: { Accept: 'application/json' }, cache: 'no-store' });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload.ok) throw new Error(payload.message || `接口返回 ${response.status}`);
-      return payload.data;
-    } catch (apiError) {
-      const error = new Error(`历史数据不可用：${apiError.message || jsonpError.message}`);
-      error.details = [jsonpError.message, apiError.message].filter(Boolean);
-      throw error;
-    }
+    const error = new Error(`历史数据不可用：${jsonpError.message || apiError?.message}`);
+    error.details = [apiError?.message, jsonpError.message].filter(Boolean);
+    throw error;
   }
+}
+
+export async function fetchHistoryMany(codes = []) {
+  const list = parseCodes(codes.join(','));
+  if (!list.length) return { items: [], errors: [] };
+  try {
+    const payload = await fetchJson(`/api/batch/history?codes=${encodeURIComponent(list.join(','))}`, 11000);
+    const items = Array.isArray(payload.data) ? payload.data : [];
+    const batchErrors = Array.isArray(payload.errors) ? payload.errors : [];
+    const returned = new Set(items.map(item => item.code));
+    const retryCodes = list.filter(code => !returned.has(code));
+    if (!retryCodes.length) return { items, errors: [] };
+    const fallback = await Promise.allSettled(retryCodes.map(code => fetchHistoryJsonp(code)));
+    const errors = [];
+    fallback.forEach((result, index) => result.status === 'fulfilled'
+      ? items.push(result.value)
+      : errors.push({
+          code: retryCodes[index],
+          message: result.reason?.message || batchErrors.find(item => item.code === retryCodes[index])?.message || '加载失败'
+        }));
+    return { items, errors };
+  } catch {
+    // 历史 JSONP 使用独立回调名，可以安全并行。
+    const settled = await Promise.allSettled(list.map(code => fetchHistoryJsonp(code)));
+    const items = [];
+    const errors = [];
+    settled.forEach((result, index) => result.status === 'fulfilled'
+      ? items.push(result.value)
+      : errors.push({ code: list[index], message: result.reason?.message || '加载失败' }));
+    return { items, errors };
+  }
+}
+
+let realtimePrefetchPromise = null;
+let historyPrefetchPromise = null;
+export function prefetchRealtime(codes = parseCodes(readLocalState().codes)) {
+  if (!codes.length || cacheIsFresh('realtime', codes, REALTIME_CACHE_MAX_AGE)) return Promise.resolve();
+  if (realtimePrefetchPromise) return realtimePrefetchPromise;
+  realtimePrefetchPromise = fetchRealtimeMany(codes).then(({ items }) => {
+    cacheRealtime(items);
+    updateFundMeta(items);
+  }).catch(() => undefined).finally(() => { realtimePrefetchPromise = null; });
+  return realtimePrefetchPromise;
+}
+
+export function prefetchHistory(codes = parseCodes(readLocalState().codes)) {
+  if (!codes.length || cacheIsFresh('history', codes, HISTORY_CACHE_MAX_AGE)) return Promise.resolve();
+  if (historyPrefetchPromise) return historyPrefetchPromise;
+  historyPrefetchPromise = fetchHistoryMany(codes).then(({ items }) => {
+    cacheHistory(items);
+    updateFundMeta(items);
+  }).catch(() => undefined).finally(() => { historyPrefetchPromise = null; });
+  return historyPrefetchPromise;
+}
+
+export function schedulePagePrefetch(currentPage = document.body?.dataset?.page) {
+  const codes = parseCodes(readLocalState().codes);
+  if (!codes.length) return;
+  const run = () => {
+    if (currentPage !== 'realtime') prefetchRealtime(codes);
+    if (currentPage !== 'history') prefetchHistory(codes);
+  };
+  if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 1200 });
+  else setTimeout(run, 450);
+  $$('[data-nav="realtime"]').forEach(link => {
+    link.addEventListener('pointerenter', () => prefetchRealtime(codes), { once: true });
+    link.addEventListener('focus', () => prefetchRealtime(codes), { once: true });
+  });
+  $$('[data-nav="history"]').forEach(link => {
+    link.addEventListener('pointerenter', () => prefetchHistory(codes), { once: true });
+    link.addEventListener('focus', () => prefetchHistory(codes), { once: true });
+  });
 }
 
 export function debounce(fn, wait = 300) {

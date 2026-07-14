@@ -6,8 +6,10 @@ export const jsonHeaders = {
   'access-control-allow-headers': 'content-type, accept'
 };
 
-export function json(body, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: jsonHeaders });
+export function json(body, status = 200, cacheControl = '') {
+  const headers = { ...jsonHeaders };
+  if (cacheControl) headers['cache-control'] = cacheControl;
+  return new Response(JSON.stringify(body), { status, headers });
 }
 
 export function finiteNumber(value) {

@@ -1,7 +1,8 @@
 import {
-  $, activateCurrentNav, escapeHtml, fetchRealtime, initializeCloud, money, num,
-  parseCodes, readLocalState, retryCloudSync, saveAndSync, setGlobalMessage,
-  setLoading, updateFundMeta
+  $, activateCurrentNav, cacheRealtime, escapeHtml, fetchRealtimeMany, initializeCloud,
+  money, num, parseCodes, prefetchHistory, readLocalState, retryCloudSync,
+  saveAndSync, schedulePagePrefetch, setGlobalMessage, setLoading, updateFundMeta,
+  writeLocalState
 } from './common.js';
 
 const MAX_FUNDS = 12;
@@ -98,7 +99,7 @@ function mirrorAndSavePosition(input) {
   const state = readLocalState();
   const positions = { ...(state.positions || {}) };
   positions[code] = { ...(positions[code] || {}), [key]: value };
-  saveAndSync({ positions });
+  writeLocalState({ positions });
   renderStats(readLocalState());
 }
 
@@ -129,21 +130,12 @@ async function recognizeNames(codes = parseCodes(readLocalState().codes), { quie
     setGlobalMessage(els.message, '当前没有可识别的基金代码。', 'error');
     return;
   }
-  setLoading(els.overlay, els.loadingText, true, `准备识别 ${codes.length} 只基金`);
-  const success = [];
-  const failed = [];
-  for (let index = 0; index < codes.length; index += 1) {
-    const code = codes[index];
-    els.loadingText.textContent = `正在识别 ${index + 1}/${codes.length}：${code}`;
-    try {
-      success.push(await fetchRealtime(code));
-    } catch (error) {
-      failed.push(code);
-    }
-  }
+  setLoading(els.overlay, els.loadingText, true, `正在并行识别 ${codes.length} 只基金`);
+  const { items: success, errors } = await fetchRealtimeMany(codes);
+  const failed = errors.map(item => item.code);
   if (success.length) {
+    cacheRealtime(success);
     updateFundMeta(success);
-    saveAndSync({ fundMeta: readLocalState().fundMeta });
   }
   render();
   setLoading(els.overlay, els.loadingText, false);
@@ -171,8 +163,9 @@ async function addFunds() {
     return;
   }
   const truncated = existing.length + incoming.length > MAX_FUNDS;
-  setGlobalMessage(els.message, `已添加 ${actuallyAdded.length} 只基金${truncated ? '；列表最多保留12只' : ''}。`, 'success');
+  setGlobalMessage(els.message, `已添加 ${actuallyAdded.length} 只基金${truncated ? '；列表最多保留12只' : ''}，基金代码将自动同步到 KV。`, 'success');
   await recognizeNames(actuallyAdded, { quiet: true });
+  prefetchHistory(actuallyAdded);
 }
 
 function removeFund(code) {
@@ -191,16 +184,16 @@ function removeFund(code) {
 
 function saveAll() {
   const positions = collectPositionsFromInputs();
-  saveAndSync({ positions });
+  writeLocalState({ positions });
   render();
-  setGlobalMessage(els.message, '基金列表与个人持仓已保存，并等待同步到 KV。', 'success');
+  setGlobalMessage(els.message, '个人持仓已保存到当前浏览器；KV 仅保存基金代码。', 'success');
 }
 
 function clearAll() {
   if (!window.confirm('确定清空全部基金和个人持仓吗？此操作无法撤销。')) return;
   saveAndSync({ codes: '', positions: {}, fundMeta: {} });
   render();
-  setGlobalMessage(els.message, '已清空全部基金和个人持仓。', 'success');
+  setGlobalMessage(els.message, '已清空基金列表与本机个人持仓；基金代码清空状态将同步到 KV。', 'success');
 }
 
 els.add.addEventListener('click', addFunds);
@@ -211,5 +204,6 @@ els.saveAll.addEventListener('click', saveAll);
 els.clearAll.addEventListener('click', clearAll);
 
 activateCurrentNav();
-await initializeCloud({ syncStatus: els.sync, message: els.message });
 render();
+initializeCloud({ syncStatus: els.sync, message: els.message }).then(() => render());
+schedulePagePrefetch('settings');
