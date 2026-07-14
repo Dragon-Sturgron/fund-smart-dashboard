@@ -1,56 +1,54 @@
-# 基金行情辅助决策台（EdgeOne Makers）
+# 基金行情辅助决策台（EdgeOne Makers + KV）
 
-这是一个无需数据库、可直接部署到 EdgeOne Makers 的基金行情网页。页面结构参考“基金实时局势辅助报表”的信息层级，但使用了独立设计与代码。
+静态前端 + Edge Functions，支持基金行情查询、规则化买卖信号、持仓录入，以及 EdgeOne KV 云端保存。
 
-## 功能
-
-- 多基金代码查询（最多 12 只）
-- 实时估算净值与历史净值
-- 近 20/60/250 日表现、年线偏离、回撤、年化波动
-- 自动计算买入分 B 和卖出分 S
-- 六档操作：暂缓买入、持有并分批买、分批买入/定投、暂停加仓重新评估、分批减仓、分批卖出
-- 保守/普通/激进三种风险档位
-- 持仓成本、本金、计划上限与止盈目标
-- 自动刷新、配置导入导出、移动端适配
-
-## 目录
+## 项目结构
 
 ```text
 public/                         静态网页
-  index.html
-  assets/styles.css
-  assets/app.js
-edge-functions/                EdgeOne Makers 边缘函数
-  api/fund/[code].js            基金行情代理接口
-package.json
-README.md
+edge-functions/api/fund/[code].js  基金行情代理接口
+edge-functions/api/config.js       KV 配置读写接口
 ```
 
-## EdgeOne Makers 部署
+## EdgeOne Makers 构建配置
 
-1. 将整个项目上传到 GitHub、Gitee 或 Coding 仓库。
-2. 进入 EdgeOne Makers，选择“导入 Git 仓库”。
-3. 推荐部署参数：
-   - Framework Preset：`None`
-   - Root Directory：仓库根目录
-   - Build Command：留空，或填写 `echo no build needed`
-   - Output Directory：`public`
-4. 不需要配置 KV、数据库或环境变量。
-5. 部署后，`edge-functions/api/fund/[code].js` 会自动映射为 `/api/fund/六位基金代码`。
+- 框架预设：Other
+- 根目录：`./`
+- 输出目录：`public`
+- 构建命令：`npm run check`
+- 安装命令：留空
 
-## 本地预览
+## KV 配置（必须）
 
-静态页面可以运行：
+1. 在 EdgeOne Makers 顶部进入“KV 存储”，开通后创建命名空间，建议名称：`fund_dashboard`。
+2. 进入当前项目，打开“KV 存储”。
+3. 点击“绑定命名空间”。
+4. 选择刚创建的命名空间。
+5. **变量名必须填写：`FUND_KV`**。
+6. 完成绑定后，重新部署一次生产环境。
+
+网页会自动保存：基金代码、风险档位、刷新频率、止盈目标、成本净值、投入本金及计划最高金额。
+
+KV 使用固定记录键：`fund_dashboard_state_v2`。首次打开时：
+
+- KV 有数据：优先从 KV 恢复；
+- KV 为空、本机有旧数据：自动迁移到 KV；
+- KV 未绑定或暂时不可用：继续使用浏览器本地缓存。
+
+> EdgeOne KV 是最终一致性存储，其他边缘节点读取到新值最长可能有约 60 秒延迟。
+
+## GitHub 更新
+
+把本目录内容覆盖到 GitHub 仓库后执行：
 
 ```bash
-npm run serve
+git add .
+git commit -m "增加 EdgeOne KV 云端存储"
+git push origin main
 ```
 
-由于本地静态服务器不会模拟 EdgeOne 边缘函数，基金查询接口需要在 EdgeOne Makers 部署后测试。也可以安装 EdgeOne CLI 后使用 Makers 的本地调试命令。
+EdgeOne Makers 会自动触发新部署。部署完成后再绑定 KV 或确认绑定仍然存在。
 
-## 计算说明
+## 数据安全提示
 
-- “位置百分位”使用近 252 个净值数据计算，不等同于 PE/PB 估值。
-- 主动基金的持仓与基金经理变化无法仅靠净值自动识别，因此“暂停加仓并重新评估”仍需要人工核对公告。
-- 场外基金盘中数据为第三方估算值，最终以基金公司披露的正式净值为准。
-- 本项目只提供规则化辅助，不构成投资建议或收益承诺。
+当前版本是单用户共享配置：访问同一网站的所有人会读取和修改同一份 KV 数据。建议不要公开分享网站地址。需要公开使用时，应追加登录或访问密码。

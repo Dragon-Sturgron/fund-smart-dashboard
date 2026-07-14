@@ -172,3 +172,15 @@ footer { padding: 22px 10px 0; text-align: center; color: #8c96a7; font-size: 12
   .position-panel { overflow: hidden; }
   h1 { font-size: 30px; }
 }
+
+.sync-line { margin-top: 13px; display: flex; align-items: center; gap: 11px; flex-wrap: wrap; }
+.sync-line small { color: #8792a4; }
+.sync-status { display: inline-flex; align-items: center; gap: 8px; min-height: 30px; padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+.sync-status span { width: 8px; height: 8px; border-radius: 50%; }
+.sync-status.pending { color: #9b6a17; background: var(--yellow-soft); }.sync-status.pending span { background: var(--yellow); }
+.sync-status.saving { color: var(--primary); background: #edf2ff; }.sync-status.saving span { background: var(--primary); animation: syncPulse 1s ease-in-out infinite; }
+.sync-status.synced { color: var(--green); background: var(--green-soft); }.sync-status.synced span { background: var(--green); }
+.sync-status.local { color: #69768b; background: #eef1f5; }.sync-status.local span { background: #96a0b0; }
+.sync-status.error { color: var(--red); background: var(--red-soft); }.sync-status.error span { background: var(--red); }
+@keyframes syncPulse { 50% { opacity: .35; transform: scale(.75); } }
+@media (max-width: 600px) { .sync-line { align-items: flex-start; flex-direction: column; } }

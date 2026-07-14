@@ -4,13 +4,18 @@ const els = {
   refresh: $('#refreshBtn'), sample: $('#sampleBtn'), clear: $('#clearBtn'), exportBtn: $('#exportBtn'), importInput: $('#importInput'),
   message: $('#globalMessage'), overlay: $('#loadingOverlay'), loadingText: $('#loadingText'),
   body: $('#fundTableBody'), mobile: $('#mobileCards'), positions: $('#positionEditor'), marketStatus: $('#marketStatus'), marketSummary: $('#marketSummary'),
-  total: $('#statTotal'), buy: $('#statBuy'), wait: $('#statWait'), sell: $('#statSell'), profit: $('#statProfit'), profitText: $('#statProfitText'), time: $('#statTime'), source: $('#statSource')
+  total: $('#statTotal'), buy: $('#statBuy'), wait: $('#statWait'), sell: $('#statSell'), profit: $('#statProfit'), profitText: $('#statProfitText'), time: $('#statTime'), source: $('#statSource'),
+  syncStatus: $('#syncStatus'), syncNow: $('#syncNowBtn')
 };
 
 const STORAGE_KEY = 'edgeone-fund-dashboard-v1';
 const MAX_FUNDS = 12;
 let currentFunds = [];
 let autoTimer = null;
+let cloudSyncEnabled = false;
+let cloudSaveTimer = null;
+let pendingCloudState = null;
+let cloudSaving = false;
 
 const riskProfiles = {
   conservative: { label: '保守型', buy: 75, hold: 48, reduce: 50, sell: 70 },
@@ -28,25 +33,114 @@ function parseCodes(value) { return [...new Set(String(value).split(/[\s,，;；
 function average(values) { const valid = values.filter(Number.isFinite); return valid.length ? valid.reduce((a,b)=>a+b,0)/valid.length : 0; }
 function standardDeviation(values) { if (values.length < 2) return 0; const avg = average(values); return Math.sqrt(average(values.map(v => (v - avg) ** 2))); }
 
-function loadState() {
-  try {
-    const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-    els.codes.value = state.codes || '';
-    els.risk.value = state.risk || 'normal';
-    els.interval.value = String(state.interval ?? 60);
-    els.target.value = state.target ?? 20;
-    return state;
-  } catch { return {}; }
+function readLocalState() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+  catch { return {}; }
 }
-function getPositions() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}').positions || {}; } catch { return {}; } }
+function loadState() {
+  const state = readLocalState();
+  els.codes.value = state.codes || '';
+  els.risk.value = ['conservative','normal','aggressive'].includes(state.risk) ? state.risk : 'normal';
+  els.interval.value = String([0,30,60,120].includes(Number(state.interval)) ? Number(state.interval) : 60);
+  els.target.value = num(state.target, 20);
+  return state;
+}
+function getPositions() { return readLocalState().positions || {}; }
 function saveState(extra = {}) {
-  const previous = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; } })();
-  const state = { ...previous, codes: els.codes.value, risk: els.risk.value, interval: num(els.interval.value), target: num(els.target.value, 20), ...extra };
+  const previous = readLocalState();
+  const state = {
+    ...previous,
+    codes: parseCodes(els.codes.value).join('\n'),
+    risk: els.risk.value,
+    interval: num(els.interval.value),
+    target: num(els.target.value, 20),
+    ...extra,
+    localUpdatedAt: new Date().toISOString()
+  };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  queueCloudSave(state);
   return state;
 }
 function setMessage(text = '', type = '') { els.message.textContent = text; els.message.className = `global-message ${type}`.trim(); }
 function setLoading(show, text = '请稍候') { els.overlay.hidden = !show; els.loadingText.textContent = text; }
+function setSyncStatus(text, tone = 'pending') {
+  if (!els.syncStatus) return;
+  els.syncStatus.className = `sync-status ${tone}`;
+  els.syncStatus.innerHTML = `<span></span>${escapeHtml(text)}`;
+}
+function hasMeaningfulState(state) {
+  return Boolean(parseCodes(state?.codes || '').length || Object.keys(state?.positions || {}).length);
+}
+async function requestCloudState(method = 'GET', state) {
+  const response = await fetch('/api/config', {
+    method,
+    headers: { 'Accept': 'application/json', ...(state ? { 'Content-Type': 'application/json' } : {}) },
+    body: state ? JSON.stringify(state) : undefined,
+    cache: 'no-store'
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok) {
+    const error = new Error(payload.message || `云端存储请求失败（${response.status}）`);
+    error.code = payload.code || '';
+    throw error;
+  }
+  return payload;
+}
+function queueCloudSave(state = readLocalState()) {
+  if (!cloudSyncEnabled) return;
+  pendingCloudState = state;
+  clearTimeout(cloudSaveTimer);
+  setSyncStatus('等待同步到 KV', 'pending');
+  cloudSaveTimer = setTimeout(flushCloudSave, 900);
+}
+async function flushCloudSave() {
+  if (!cloudSyncEnabled || cloudSaving || !pendingCloudState) return;
+  cloudSaving = true;
+  clearTimeout(cloudSaveTimer);
+  while (pendingCloudState) {
+    const state = pendingCloudState;
+    pendingCloudState = null;
+    setSyncStatus('正在保存到 KV', 'saving');
+    try {
+      const payload = await requestCloudState('PUT', state);
+      const time = payload.updatedAt ? new Date(payload.updatedAt).toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit' }) : '';
+      setSyncStatus(`KV 已同步${time ? ` · ${time}` : ''}`, 'synced');
+    } catch (error) {
+      pendingCloudState = state;
+      setSyncStatus('KV 同步失败，点击重试', 'error');
+      setMessage(error.message || 'KV 同步失败，数据仍已保存在本机。', 'error');
+      break;
+    }
+  }
+  cloudSaving = false;
+}
+async function initializeCloudState() {
+  setSyncStatus('正在连接 KV', 'saving');
+  try {
+    const payload = await requestCloudState('GET');
+    cloudSyncEnabled = true;
+    if (payload.data) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload.data));
+      loadState();
+      const time = payload.updatedAt ? new Date(payload.updatedAt).toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit' }) : '';
+      setSyncStatus(`已从 KV 恢复${time ? ` · ${time}` : ''}`, 'synced');
+      return payload.data;
+    }
+    const local = readLocalState();
+    if (hasMeaningfulState(local)) {
+      pendingCloudState = local;
+      await flushCloudSave();
+    } else {
+      setSyncStatus('KV 已连接，等待保存', 'synced');
+    }
+    return local;
+  } catch (error) {
+    cloudSyncEnabled = false;
+    if (error.code === 'KV_NOT_BOUND') setSyncStatus('KV 未绑定，仅本机保存', 'local');
+    else setSyncStatus('KV 暂不可用，仅本机保存', 'error');
+    return readLocalState();
+  }
+}
 
 async function fetchFund(code) {
   const response = await fetch(`/api/fund/${code}?t=${Date.now()}`, { headers: { 'Accept': 'application/json' } });
@@ -185,9 +279,11 @@ function renderPositionEditor() {
 }
 function onPositionChange(event) {
   const code = event.target.dataset.code, field = event.target.dataset.pos;
-  const state = saveState(); state.positions ||= {}; state.positions[code] ||= {}; state.positions[code][field] = event.target.value; localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  const positions = { ...getPositions() };
+  positions[code] = { ...(positions[code] || {}), [field]: event.target.value };
+  saveState({ positions });
   currentFunds = currentFunds.map(f => buildFundView({ code:f.code, name:f.name, estimate:f.estimate, history:f.history, source:f.source }));
-  renderAll(); setMessage('持仓已保存，买卖信号已重新计算。', 'success');
+  renderAll(); setMessage('持仓已保存，并将自动同步到 KV。', 'success');
 }
 
 function tableRow(f) {
@@ -249,12 +345,28 @@ async function refreshFunds({silent=false}={}) {
 function setupAutoRefresh() { clearInterval(autoTimer); const seconds=num(els.interval.value); if(seconds>0&&parseCodes(els.codes.value).length)autoTimer=setInterval(()=>refreshFunds({silent:true}),seconds*1000); }
 function clearAll() { currentFunds=[]; els.codes.value=''; saveState({positions:{}}); renderAll(); els.time.textContent='--:--'; els.source.textContent='等待数据'; setMessage('已清空基金列表和持仓配置。','success'); }
 function exportConfig() { const state=saveState(); const blob=new Blob([JSON.stringify({...state,exportedAt:new Date().toISOString()},null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url;a.download=`基金决策台配置-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url); }
-async function importConfig(file) { try { const data=JSON.parse(await file.text()); localStorage.setItem(STORAGE_KEY,JSON.stringify(data)); loadState(); setMessage('配置已导入，正在重新加载基金数据。','success'); if(parseCodes(els.codes.value).length)refreshFunds(); } catch { setMessage('配置文件格式不正确。','error'); } finally { els.importInput.value=''; } }
+async function importConfig(file) { try { const data=JSON.parse(await file.text()); localStorage.setItem(STORAGE_KEY,JSON.stringify(data)); loadState(); saveState(); setMessage('配置已导入，并将自动同步到 KV。','success'); if(parseCodes(els.codes.value).length)refreshFunds(); } catch { setMessage('配置文件格式不正确。','error'); } finally { els.importInput.value=''; } }
 
 els.refresh.addEventListener('click',()=>refreshFunds());
 els.sample.addEventListener('click',()=>{ els.codes.value='000001\n110022\n161725'; saveState(); setMessage('已填入示例代码，仅用于演示页面，不代表推荐。'); });
 els.clear.addEventListener('click',clearAll); els.exportBtn.addEventListener('click',exportConfig); els.importInput.addEventListener('change',e=>e.target.files[0]&&importConfig(e.target.files[0]));
+els.syncNow?.addEventListener('click', async () => {
+  if (!cloudSyncEnabled) {
+    await initializeCloudState();
+    if (!cloudSyncEnabled) return setMessage('请先在 EdgeOne 项目中绑定变量名为 FUND_KV 的 KV 命名空间。', 'error');
+  }
+  pendingCloudState = readLocalState();
+  await flushCloudSave();
+});
 [els.codes,els.risk,els.interval,els.target].forEach(el=>el.addEventListener('change',()=>{saveState();setupAutoRefresh();if(currentFunds.length&&[els.risk,els.target].includes(el)){currentFunds=currentFunds.map(f=>buildFundView({code:f.code,name:f.name,estimate:f.estimate,history:f.history,source:f.source}));renderAll();}}));
 
-const initial=loadState(); renderAll(); setupAutoRefresh();
-if(parseCodes(els.codes.value).length && initial.autoLoad !== false) refreshFunds({silent:false});
+async function initializeApp() {
+  loadState();
+  renderAll();
+  await initializeCloudState();
+  const initial = loadState();
+  renderAll();
+  setupAutoRefresh();
+  if (parseCodes(els.codes.value).length && initial.autoLoad !== false) refreshFunds({silent:false});
+}
+initializeApp();

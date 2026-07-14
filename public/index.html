@@ -64,6 +64,11 @@
         <button id="clearBtn" class="btn btn-light" type="button">清空</button>
         <button id="exportBtn" class="btn btn-light" type="button">导出配置</button>
         <label class="btn btn-light file-btn">导入配置<input id="importInput" type="file" accept="application/json" /></label>
+        <button id="syncNowBtn" class="btn btn-light" type="button">立即同步 KV</button>
+      </div>
+      <div class="sync-line">
+        <div id="syncStatus" class="sync-status pending"><span></span>正在连接 KV</div>
+        <small>基金代码、风险档位、止盈目标及持仓会自动保存；本地缓存仍作为断网备用。</small>
       </div>
       <div id="globalMessage" class="global-message" role="status" aria-live="polite"></div>
     </section>
