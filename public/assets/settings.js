@@ -8,13 +8,40 @@ import {
 const MAX_FUNDS = 12;
 const els = {
   newCode: $('#newFundCode'), newAmount: $('#newHoldingAmount'), newProfit: $('#newHoldingProfit'),
-  add: $('#addFundsBtn'), sample: $('#sampleBtn'), recognize: $('#recognizeBtn'),
-  syncNow: $('#syncNowBtn'), sync: $('#syncStatus'), message: $('#globalMessage'),
-  body: $('#settingsBody'), mobile: $('#mobileSettingsCards'), saveAll: $('#saveAllBtn'),
-  clearAll: $('#clearAllBtn'), overlay: $('#loadingOverlay'), loadingText: $('#loadingText'),
-  statFundCount: $('#statFundCount'), statHoldingCount: $('#statHoldingCount'),
-  statHoldingAmount: $('#statHoldingAmount'), statHoldingProfit: $('#statHoldingProfit')
+  openAdd: $('#openAddModalBtn'), add: $('#addFundsBtn'), closeAdd: $('#closeAddModalBtn'), cancelAdd: $('#cancelAddModalBtn'),
+  addModal: $('#addFundModal'), addModalMessage: $('#addModalMessage'), recognize: $('#recognizeBtn'), syncNow: $('#syncNowBtn'),
+  sync: $('#syncStatus'), message: $('#globalMessage'), body: $('#settingsBody'),
+  mobile: $('#mobileSettingsCards'), saveAll: $('#saveAllBtn'), clearAll: $('#clearAllBtn'),
+  overlay: $('#loadingOverlay'), loadingText: $('#loadingText'), statFundCount: $('#statFundCount'),
+  statHoldingCount: $('#statHoldingCount'), statHoldingAmount: $('#statHoldingAmount'),
+  statHoldingProfit: $('#statHoldingProfit')
 };
+
+let lastFocusedElement = null;
+
+function clearAddForm() {
+  els.newCode.value = '';
+  els.newAmount.value = '';
+  els.newProfit.value = '';
+}
+
+function openAddModal() {
+  lastFocusedElement = document.activeElement;
+  clearAddForm();
+  setGlobalMessage(els.addModalMessage);
+  els.addModal.hidden = false;
+  els.addModal.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('modal-open');
+  requestAnimationFrame(() => els.newCode.focus());
+}
+
+function closeAddModal() {
+  if (els.addModal.hidden) return;
+  els.addModal.hidden = true;
+  els.addModal.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('modal-open');
+  if (lastFocusedElement instanceof HTMLElement) lastFocusedElement.focus();
+}
 
 function hasInputValue(value) {
   return value !== '' && value !== null && value !== undefined && Number.isFinite(Number(value));
@@ -113,7 +140,7 @@ function render() {
   const codes = parseCodes(state.codes);
   if (!codes.length) {
     els.body.innerHTML = '<tr><td colspan="6" class="table-empty">尚未添加基金代码。</td></tr>';
-    els.mobile.innerHTML = '<div class="empty-mobile-card">在上方填写基金代码、持有金额和持有收益后添加。</div>';
+    els.mobile.innerHTML = '<div class="empty-mobile-card">点击“新增基金”，填写基金代码、持有金额和持有收益后添加。</div>';
   } else {
     els.body.innerHTML = codes.map(code => {
       const position = positionFor(state, code);
@@ -284,26 +311,26 @@ async function addFund() {
   const profit = Number(profitRaw);
 
   if (!/^\d{6}$/.test(code)) {
-    setGlobalMessage(els.message, '请输入正确的六位基金代码。', 'error');
+    setGlobalMessage(els.addModalMessage, '请输入正确的六位基金代码。', 'error');
     return;
   }
   if (!Number.isFinite(amount) || amount <= 0) {
-    setGlobalMessage(els.message, '持有金额必须大于 0。', 'error');
+    setGlobalMessage(els.addModalMessage, '持有金额必须大于 0。', 'error');
     return;
   }
   if (profitRaw === '' || !Number.isFinite(profit)) {
-    setGlobalMessage(els.message, '请填写持有收益；没有收益时填写 0，亏损时填写负数。', 'error');
+    setGlobalMessage(els.addModalMessage, '请填写持有收益；没有收益时填写 0，亏损时填写负数。', 'error');
     return;
   }
   if (amount - profit <= 0) {
-    setGlobalMessage(els.message, '持有收益不能大于或等于持有金额，否则无法反推有效投入本金。', 'error');
+    setGlobalMessage(els.addModalMessage, '持有收益不能大于或等于持有金额，否则无法反推有效投入本金。', 'error');
     return;
   }
 
   const state = readLocalState();
   const existing = parseCodes(state.codes);
   if (!existing.includes(code) && existing.length >= MAX_FUNDS) {
-    setGlobalMessage(els.message, '基金列表最多保存 12 只，请先删除一只再添加。', 'error');
+    setGlobalMessage(els.addModalMessage, '基金列表最多保存 12 只，请先删除一只再添加。', 'error');
     return;
   }
 
@@ -316,9 +343,8 @@ async function addFund() {
     saveAndSync({ codes: codes.join('\n'), positions });
     updateFundMeta([{ ...quote.item, code }]);
 
-    els.newCode.value = '';
-    els.newAmount.value = '';
-    els.newProfit.value = '';
+    clearAddForm();
+    closeAddModal();
     render();
     const shares = num(positions[code].shares, 0);
     setGlobalMessage(
@@ -328,7 +354,7 @@ async function addFund() {
     );
     prefetchHistory([code]);
   } catch (error) {
-    setGlobalMessage(els.message, `添加失败：${error.message}。未取得净值时不会生成错误的持有份额。`, 'error');
+    setGlobalMessage(els.addModalMessage, `添加失败：${error.message}。未取得净值时不会生成错误的持有份额。`, 'error');
   } finally {
     setLoading(els.overlay, els.loadingText, false);
   }
@@ -362,16 +388,22 @@ function clearAll() {
   setGlobalMessage(els.message, '已清空基金列表与本机个人持仓；基金代码清空状态将同步到 KV。', 'success');
 }
 
+els.openAdd.addEventListener('click', openAddModal);
+els.closeAdd.addEventListener('click', closeAddModal);
+els.cancelAdd.addEventListener('click', closeAddModal);
 els.add.addEventListener('click', addFund);
-els.sample.addEventListener('click', () => {
-  els.newCode.value = '005827';
-  els.newAmount.value = '10500';
-  els.newProfit.value = '500';
-});
 els.recognize.addEventListener('click', () => recognizeNames());
 els.syncNow.addEventListener('click', retryCloudSync);
 els.saveAll.addEventListener('click', saveAll);
 els.clearAll.addEventListener('click', clearAll);
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !els.addModal.hidden) closeAddModal();
+  if (event.key === 'Enter' && !els.addModal.hidden && document.activeElement !== els.add) {
+    event.preventDefault();
+    addFund();
+  }
+});
 
 activateCurrentNav();
 render();

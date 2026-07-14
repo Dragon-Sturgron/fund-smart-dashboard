@@ -1,6 +1,6 @@
 {
   "name": "fund-smart-dashboard",
-  "version": "2.5.1-namefix1",
-  "feature": "auto-fund-name-recognition",
+  "version": "2.5.1-modal1",
+  "feature": "add-fund-modal-and-auto-fund-name-recognition",
   "settingsPage": "/settings.html"
 }
