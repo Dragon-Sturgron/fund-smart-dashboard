@@ -163,9 +163,15 @@ function calculateMetrics(raw) {
   if (history.length < 2) throw new Error('历史净值数据不足');
   const estimateValue = num(raw.estimate?.estimatedNav, NaN);
   const latestNav = history.at(-1).nav;
-  const current = Number.isFinite(estimateValue) ? estimateValue : latestNav;
+  const hasIntradayEstimate = Number.isFinite(estimateValue);
+  const current = hasIntradayEstimate ? estimateValue : latestNav;
   const previous = num(raw.estimate?.previousNav, history.at(-2).nav);
-  const dailyChange = previous ? (current / previous - 1) * 100 : num(raw.estimate?.estimatedRate, 0);
+  const reportedRate = num(raw.estimate?.estimatedRate, NaN);
+  const dailyChange = hasIntradayEstimate && previous
+    ? (current / previous - 1) * 100
+    : Number.isFinite(reportedRate)
+      ? reportedRate
+      : (history.at(-2).nav ? (latestNav / history.at(-2).nav - 1) * 100 : 0);
   const adjusted = [...history];
   if (Number.isFinite(estimateValue)) adjusted.push({ date: raw.estimate?.time || '盘中', nav: estimateValue, rate: dailyChange });
 

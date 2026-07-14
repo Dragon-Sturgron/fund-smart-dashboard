@@ -1,6 +1,6 @@
 {
   "name": "edgeone-fund-dashboard",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "description": "基金行情与规则化买卖辅助面板，适配 EdgeOne Makers，并支持 KV 云端保存。",
