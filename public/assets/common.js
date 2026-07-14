@@ -87,7 +87,31 @@ export function setLoading(overlay, loadingText, show, text = '请稍候') {
   if (loadingText) loadingText.textContent = text;
 }
 
+const NAV_ITEMS = [
+  { key: 'realtime', href: '/realtime.html', title: '实时行情页', subtitle: '查看今天涨跌', mark: 'live-mark' },
+  { key: 'history', href: '/history.html', title: '历史分析页', subtitle: '计算买卖信号', mark: 'history-mark' },
+  { key: 'settings', href: '/settings.html', title: '设置', subtitle: '基金与个人持仓', mark: 'settings-mark' }
+];
+
+function ensureTopNavigation() {
+  const tabs = $('.page-tabs');
+  if (!tabs) return;
+
+  // 修复浏览器或 EdgeOne 边缘缓存混用旧 HTML 与新 CSS 时，
+  // 导航只剩两个按钮、第三格显示为空白的问题。
+  const currentKeys = $$('[data-nav]', tabs).map(link => link.dataset.nav).join(',');
+  const expectedKeys = NAV_ITEMS.map(item => item.key).join(',');
+  if (currentKeys !== expectedKeys) {
+    tabs.innerHTML = NAV_ITEMS.map(item => `
+      <a class="page-tab" data-nav="${item.key}" href="${item.href}" role="tab" aria-selected="false">
+        <span class="tab-mark ${item.mark}" aria-hidden="true"></span>
+        <span><b>${item.title}</b><small>${item.subtitle}</small></span>
+      </a>`).join('');
+  }
+}
+
 export function activateCurrentNav() {
+  ensureTopNavigation();
   const page = document.body.dataset.page;
   $$('[data-nav]').forEach(link => {
     const active = link.dataset.nav === page;

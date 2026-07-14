@@ -1,6 +1,6 @@
 {
   "name": "fund-smart-dashboard",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "private": true,
   "type": "module",
   "description": "基智盘：适配EdgeOne Makers的实时行情、历史分析与基金持仓设置三页面项目。",
