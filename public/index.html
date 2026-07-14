@@ -3,31 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="refresh" content="0; url=/realtime.html" />
   <meta name="theme-color" content="#f4f7fd" />
-  <meta name="description" content="基智盘：实时行情与历史量化分析分开查看。" />
-  <title>基智盘｜基金行情与决策辅助</title>
+  <title>基智盘｜正在进入实时行情</title>
   <link rel="stylesheet" href="/assets/styles.css" />
+  <script>window.location.replace('/realtime.html');</script>
 </head>
-<body data-page="home">
-  <div class="background-orb orb-one"></div><div class="background-orb orb-two"></div>
-  <main class="page-shell">
-    <nav class="top-nav"><a class="brand-link" href="/">基智盘</a><div class="nav-links"><a data-nav="home" href="/">首页</a><a data-nav="realtime" href="/realtime.html">实时行情</a><a data-nav="history" href="/history.html">历史分析</a></div></nav>
-    <header class="hero panel"><div class="hero-copy"><div class="eyebrow"><span></span> FUND SMART DASHBOARD</div><h1>实时看行情，历史做决策</h1><p>将盘中估算与历史量化分析拆成两个页面：实时页只观察今天涨跌，历史页再根据趋势、回撤、波动与仓位计算买入或卖出建议。</p></div><div class="hero-badge"><span class="pulse-dot"></span>规则辅助，不构成投资建议</div></header>
-
-    <section class="page-choices">
-      <a class="page-choice panel" href="/realtime.html"><div class="choice-icon">↗</div><h2>实时行情</h2><p>查看盘中估算涨跌、估算净值、更新时间和当日强弱。适合白天快速观察，不直接作为最终买卖依据。</p><div class="choice-meta"><span>盘中估算</span><span>自动刷新</span><span>手机适配</span></div></a>
-      <a class="page-choice history-choice panel" href="/history.html"><div class="choice-icon">⌁</div><h2>历史分析</h2><p>读取正式历史净值，计算近20/60/250日表现、回撤、年线偏离、买入分和卖出分，输出六档操作建议。</p><div class="choice-meta"><span>正式净值</span><span>量化评分</span><span>买卖信号</span></div></a>
-    </section>
-
-    <section class="control-panel panel">
-      <div class="section-title"><div><span class="section-kicker">SHARED WATCHLIST</span><h2>共用基金列表</h2></div><p>这里保存后，实时页和历史页会自动使用同一份基金代码。</p></div>
-      <div class="control-grid two"><label class="field field-wide"><span>基金代码</span><textarea id="fundCodes" rows="4" placeholder="例如：005827、000001；支持逗号、空格或换行分隔"></textarea><small>最多12只基金</small></label><div class="saved-overview"><div><span class="section-kicker">已保存</span><div id="fundCount" class="big-number">0</div></div><div id="savedFunds" class="code-chips"></div></div></div>
-      <div class="button-row"><button id="saveBtn" class="btn btn-primary" type="button">保存基金列表</button><button id="sampleBtn" class="btn btn-ghost" type="button">填入示例</button><button id="clearBtn" class="btn btn-light" type="button">清空</button><button id="syncNowBtn" class="btn btn-light" type="button">立即同步 KV</button></div>
-      <div class="sync-line"><div id="syncStatus" class="sync-status pending"><span></span>正在连接 KV</div><small>基金代码、基金名称及持仓信息会保存到KV；未绑定KV时自动使用浏览器本地存储。</small></div>
-      <div id="globalMessage" class="global-message" role="status"></div>
-    </section>
-    <footer><p>场外基金盘中数据通常为第三方估算，最终以基金公司披露的正式净值为准。</p></footer>
+<body>
+  <main class="redirect-page panel">
+    <strong>正在进入实时行情页……</strong>
+    <a class="btn btn-primary" href="/realtime.html">立即进入</a>
   </main>
-  <script type="module" src="/assets/home.js"></script>
 </body>
 </html>

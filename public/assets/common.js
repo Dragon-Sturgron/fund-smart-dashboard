@@ -89,7 +89,13 @@ export function setLoading(overlay, loadingText, show, text = '请稍候') {
 
 export function activateCurrentNav() {
   const page = document.body.dataset.page;
-  $$('[data-nav]').forEach(link => link.classList.toggle('active', link.dataset.nav === page));
+  $$('[data-nav]').forEach(link => {
+    const active = link.dataset.nav === page;
+    link.classList.toggle('active', active);
+    link.setAttribute('aria-selected', String(active));
+    if (active) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  });
 }
 
 let cloudSyncEnabled = false;

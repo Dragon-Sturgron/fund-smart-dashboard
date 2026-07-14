@@ -8,7 +8,13 @@
 <body data-page="history">
   <div class="background-orb orb-one"></div><div class="background-orb orb-two"></div>
   <main class="page-shell">
-    <nav class="top-nav"><a class="brand-link" href="/">基智盘</a><div class="nav-links"><a data-nav="home" href="/">首页</a><a data-nav="realtime" href="/realtime.html">实时行情</a><a data-nav="history" href="/history.html">历史分析</a></div></nav>
+    <nav class="top-nav" aria-label="页面导航">
+      <a class="brand-link" href="/realtime.html" aria-label="基智盘实时行情首页">基智盘</a>
+      <div class="page-tabs" role="tablist" aria-label="行情页面切换">
+        <a class="page-tab" data-nav="realtime" href="/realtime.html" role="tab" aria-selected="false"><span class="tab-mark live-mark" aria-hidden="true"></span><span><b>实时行情页</b><small>查看今天涨跌</small></span></a>
+        <a class="page-tab" data-nav="history" href="/history.html" role="tab" aria-selected="false"><span class="tab-mark history-mark" aria-hidden="true"></span><span><b>历史分析页</b><small>计算买卖信号</small></span></a>
+      </div>
+    </nav>
     <header class="hero panel"><div class="hero-copy"><div class="eyebrow"><span></span> HISTORICAL SIGNAL</div><h1>历史净值与买卖分析</h1><p>使用正式历史净值计算近20/60/250日涨跌、年线偏离、回撤、波动率、买入分B与卖出分S，再给出六档操作建议。</p></div><div class="hero-badge"><span class="pulse-dot"></span>建议每周计算，连续两周确认</div></header>
     <section class="control-panel panel"><div class="control-grid history"><label class="field field-wide"><span>基金代码</span><textarea id="fundCodes" rows="4" placeholder="最多12只基金"></textarea><small>与首页、实时行情页共用列表</small></label><label class="field"><span>我的风险档位</span><select id="riskLevel"><option value="conservative">保守型</option><option value="normal" selected>普通型</option><option value="aggressive">激进型</option></select></label><label class="field"><span>默认止盈目标</span><div class="input-suffix"><input id="targetReturn" type="number" min="1" max="200" value="20" /><b>%</b></div></label></div><div class="button-row"><button id="refreshBtn" class="btn btn-primary" type="button">计算历史信号</button><button id="sampleBtn" class="btn btn-ghost" type="button">填入示例</button><button id="clearBtn" class="btn btn-light" type="button">清空</button><button id="syncNowBtn" class="btn btn-light" type="button">立即同步 KV</button></div><div class="sync-line"><div id="syncStatus" class="sync-status pending"><span></span>正在连接 KV</div><small>历史页优先通过浏览器JSONP读取正式净值，EdgeOne接口作为备用。</small></div><div id="globalMessage" class="global-message" role="status"></div></section>
     <section class="position-panel panel"><div class="section-title"><div><span class="section-kicker">MY POSITIONS</span><h2>我的持仓（可不填）</h2></div><p>填写后卖出分会加入超配程度和目标收益完成度。</p></div><div id="positionEditor" class="position-editor empty-state-mini">加载历史数据后可填写持仓。</div></section>

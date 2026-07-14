@@ -8,7 +8,13 @@
 <body data-page="realtime">
   <div class="background-orb orb-one"></div><div class="background-orb orb-two"></div>
   <main class="page-shell">
-    <nav class="top-nav"><a class="brand-link" href="/">基智盘</a><div class="nav-links"><a data-nav="home" href="/">首页</a><a data-nav="realtime" href="/realtime.html">实时行情</a><a data-nav="history" href="/history.html">历史分析</a></div></nav>
+    <nav class="top-nav" aria-label="页面导航">
+      <a class="brand-link" href="/realtime.html" aria-label="基智盘实时行情首页">基智盘</a>
+      <div class="page-tabs" role="tablist" aria-label="行情页面切换">
+        <a class="page-tab" data-nav="realtime" href="/realtime.html" role="tab" aria-selected="false"><span class="tab-mark live-mark" aria-hidden="true"></span><span><b>实时行情页</b><small>查看今天涨跌</small></span></a>
+        <a class="page-tab" data-nav="history" href="/history.html" role="tab" aria-selected="false"><span class="tab-mark history-mark" aria-hidden="true"></span><span><b>历史分析页</b><small>计算买卖信号</small></span></a>
+      </div>
+    </nav>
     <header class="hero panel"><div class="hero-copy"><div class="eyebrow"><span></span> INTRADAY VIEW</div><h1>基金实时行情</h1><p>只看今天的盘中估算涨跌与更新时间。该页面优先使用浏览器JSONP直连，EdgeOne接口作为备用，避免原先的“Failed to fetch”导致整页不可用。</p></div><div class="hero-badge"><span class="pulse-dot"></span>盘中估算，不是正式净值</div></header>
     <section class="control-panel panel"><div class="control-grid two"><label class="field field-wide"><span>基金代码</span><textarea id="fundCodes" rows="4" placeholder="最多12只基金"></textarea><small>与首页、历史分析页共用列表</small></label><label class="field"><span>自动刷新</span><select id="refreshInterval"><option value="0">关闭</option><option value="30">30秒</option><option value="60" selected>60秒</option><option value="120">2分钟</option></select></label></div><div class="button-row"><button id="refreshBtn" class="btn btn-primary" type="button">刷新实时行情</button><button id="sampleBtn" class="btn btn-ghost" type="button">填入示例</button><button id="clearBtn" class="btn btn-light" type="button">清空</button><button id="syncNowBtn" class="btn btn-light" type="button">立即同步 KV</button></div><div class="sync-line"><div id="syncStatus" class="sync-status pending"><span></span>正在连接 KV</div><small>实时页不参与长期买卖评分；需要买卖结论请进入历史分析。</small></div><div id="globalMessage" class="global-message" role="status"></div></section>
     <section class="market-panel panel"><div class="market-head"><div><span class="section-kicker">TODAY</span><h2>观察列表盘中状态</h2></div><div id="marketStatus" class="market-status neutral"><span></span>等待加载</div></div><p id="marketSummary">刷新后将汇总观察列表的盘中估算表现。</p></section>
