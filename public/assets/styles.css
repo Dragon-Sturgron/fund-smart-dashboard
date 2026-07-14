@@ -119,7 +119,15 @@ textarea:focus, input:focus, select:focus { border-color: #9bb0ff; box-shadow: 0
 .results-message:not(:empty) { margin: 4px 0 12px; }
 .table-note { margin: 0 0 11px; color: var(--muted); font-size: 12px; text-align: right; }
 .settings-help { margin-bottom: 14px; padding: 12px 14px; color: #68758a; background: #f5f7fb; border: 1px solid #e7ebf2; border-radius: 12px; font-size: 12px; line-height: 1.7; }
-.settings-table { min-width: 980px; }
+
+.add-holding-grid { display: grid; grid-template-columns: minmax(180px,.8fr) repeat(2,minmax(220px,1fr)); gap: 14px; align-items: start; }
+.calculation-note { margin-top: 14px; padding: 11px 13px; border-radius: 12px; color: #657389; background: #f5f8ff; border: 1px solid #e2e9fb; font-size: 12px; line-height: 1.7; }
+.calculated-share { display: grid; gap: 3px; min-width: 120px; }
+.calculated-share b { font-size: 14px; }
+.calculated-share small { color: var(--muted); font-size: 10px; }
+.mobile-calculated-field { display: grid; gap: 8px; padding: 11px 12px; border-radius: 12px; background: #f5f7fb; }
+.mobile-calculated-field > span { font-size: 12px; font-weight: 800; color: #66758a; }
+.settings-table { min-width: 900px; }
 .settings-table input { min-width: 150px; min-height: 38px; }
 .btn-small { min-height: 34px; padding: 6px 11px; font-size: 12px; }
 .danger-outline { color: var(--red); border-color: #ffd2d0; background: #fff7f7; }
@@ -190,6 +198,8 @@ footer { padding: 22px 10px 0; text-align: center; color: #8c96a7; font-size: 12
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 1000px) {
   .control-grid, .control-grid.two, .control-grid.history { grid-template-columns: repeat(2, 1fr); }
+  .add-holding-grid { grid-template-columns: repeat(2, 1fr); }
+  .add-holding-grid .field:first-child { grid-column: 1 / -1; }
   .field-wide { grid-column: 1 / -1; }
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .page-choices { grid-template-columns: 1fr; }
@@ -207,6 +217,8 @@ footer { padding: 22px 10px 0; text-align: center; color: #8c96a7; font-size: 12
   .hero { align-items: flex-start; flex-direction: column; }
   .hero-badge { white-space: normal; }
   .control-grid, .control-grid.two, .control-grid.history { grid-template-columns: 1fr; }
+  .add-holding-grid { grid-template-columns: 1fr; }
+  .add-holding-grid .field:first-child { grid-column: auto; }
   .field-wide { grid-column: auto; }
   .button-row { display: grid; grid-template-columns: repeat(2, 1fr); }.btn-primary { grid-column: span 2; order: -1; }
   .sync-line { align-items: flex-start; flex-direction: column; }

@@ -109,10 +109,37 @@ export function parseCodes(value) {
     .slice(0, MAX_FUNDS);
 }
 
+function migrateHoldingShape(state = {}) {
+  const positions = { ...(state.positions || {}) };
+  let changed = Number(state.version || 0) < 5;
+  for (const [code, rawValue] of Object.entries(positions)) {
+    const raw = rawValue && typeof rawValue === 'object' ? rawValue : {};
+    if (raw.holdingAmount !== undefined || raw.shares !== undefined) continue;
+    const principal = Number(raw.principal);
+    const costNav = Number(raw.costNav);
+    const validPrincipal = Number.isFinite(principal) && principal > 0 ? principal : 0;
+    const validCost = Number.isFinite(costNav) && costNav > 0 ? costNav : 0;
+    const shares = validPrincipal > 0 && validCost > 0 ? validPrincipal / validCost : 0;
+    positions[code] = {
+      ...raw,
+      holdingAmount: validPrincipal || '',
+      holdingProfit: validPrincipal ? 0 : '',
+      shares: shares || '',
+      navAtCalculation: validCost || ''
+    };
+    changed = true;
+  }
+  return { state: { ...state, positions, version: 5 }, changed };
+}
+
 export function readLocalState() {
   try {
     const current = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-    if (current && typeof current === 'object') return current;
+    if (current && typeof current === 'object') {
+      const migrated = migrateHoldingShape(current);
+      if (migrated.changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated.state));
+      return migrated.state;
+    }
   } catch {}
 
   // 自动迁移旧版本本地数据。
@@ -120,7 +147,7 @@ export function readLocalState() {
     try {
       const old = JSON.parse(localStorage.getItem(oldKey) || '{}');
       if (old && typeof old === 'object' && (old.codes || old.positions)) {
-        const migrated = { ...old, version: 4 };
+        const migrated = migrateHoldingShape(old).state;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
         return migrated;
       }
@@ -133,7 +160,7 @@ export function writeLocalState(partial = {}) {
   const state = {
     ...readLocalState(),
     ...partial,
-    version: 4,
+    version: 5,
     localUpdatedAt: new Date().toISOString()
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -292,7 +319,7 @@ export async function initializeCloud({ syncStatus, message } = {}) {
       const merged = {
         ...local,
         codes: parseCodes(payload.data.codes).join('\n'),
-        version: 4,
+        version: 5,
         localUpdatedAt: new Date().toISOString()
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));

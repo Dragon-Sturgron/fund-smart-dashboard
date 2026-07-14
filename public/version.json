@@ -1,0 +1,6 @@
+{
+  "name": "fund-smart-dashboard",
+  "version": "2.5.1",
+  "feature": "holding-amount-profit-shares",
+  "settingsPage": "/settings-v251.html"
+}

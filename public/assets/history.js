@@ -57,7 +57,7 @@ function renderSavedSummary() {
   const names = codes.slice(0, 5).map(code => state.fundMeta?.[code]?.name || code);
   const holdingCount = codes.filter(code => {
     const p = state.positions?.[code] || {};
-    return num(p.costNav) > 0 && num(p.principal) > 0;
+    return num(p.holdingAmount) > 0 && num(p.shares) > 0;
   }).length;
   els.summary.textContent = `共 ${codes.length} 只基金，已填写 ${holdingCount} 只个人持仓：${names.join('、')}${codes.length > 5 ? ' 等' : ''}`;
 }
@@ -75,7 +75,18 @@ function saveControls(extra = {}) {
   });
 }
 function getPosition(code) {
-  return readLocalState().positions?.[code] || { costNav: '', principal: '', planMax: '' };
+  const raw = readLocalState().positions?.[code] || {};
+  if (raw.holdingAmount !== undefined || raw.shares !== undefined) return raw;
+  const principal = num(raw.principal, 0);
+  const costNav = num(raw.costNav, 0);
+  const shares = principal > 0 && costNav > 0 ? principal / costNav : 0;
+  return {
+    ...raw,
+    holdingAmount: principal || '',
+    holdingProfit: principal > 0 ? 0 : '',
+    shares: shares || '',
+    navAtCalculation: costNav || ''
+  };
 }
 function calculateMetrics(raw) {
   const history = [...raw.history].sort((a, b) => a.date.localeCompare(b.date));
@@ -117,19 +128,23 @@ function calculateScores(metrics, position) {
   const O = clamp((num(metrics.r20) - 5) * 10);
   const sigmaRisk = clamp(metrics.volatility * 2.3);
   const Q = clamp(metrics.quality);
-  const cost = num(position.costNav, 0);
-  const principal = num(position.principal, 0);
-  const planMax = num(position.planMax, 0);
-  const shares = cost > 0 ? principal / cost : 0;
-  const marketValue = shares * metrics.current;
-  const holdingReturn = principal > 0 ? (marketValue / principal - 1) * 100 : NaN;
-  const P = planMax > 0 ? marketValue / planMax : 0;
-  const W = clamp((P - 1) * 200);
+  const shares = num(position.shares, 0);
+  const enteredAmount = num(position.holdingAmount, 0);
+  const enteredProfit = num(position.holdingProfit, 0);
+  const principal = enteredAmount > 0 ? enteredAmount - enteredProfit : 0;
+  const marketValue = shares > 0 ? shares * metrics.current : 0;
+  const currentProfit = principal > 0 && marketValue > 0 ? marketValue - principal : enteredProfit;
+  const holdingReturn = principal > 0 ? currentProfit / principal * 100 : NaN;
   const target = Math.max(1, num(els.target.value, 20));
   const G = Number.isFinite(holdingReturn) ? clamp(holdingReturn / target * 100) : 0;
   const B = clamp(0.30 * C + 0.15 * A + 0.20 * T + 0.20 * Q + 0.15 * (100 - sigmaRisk) - 0.15 * O);
-  const S = clamp(0.30 * V + 0.20 * O + 0.25 * W + 0.15 * G + 0.10 * sigmaRisk);
-  return { V, C, A, T, O, sigmaRisk, Q, P, W, G, B, S, shares, marketValue, holdingReturn, hasHolding: principal > 0 && cost > 0 };
+  // 已移除“计划最高金额”，卖出分改由位置、过热、目标完成度和波动风险共同构成。
+  const S = clamp(0.35 * V + 0.25 * O + 0.25 * G + 0.15 * sigmaRisk);
+  return {
+    V, C, A, T, O, sigmaRisk, Q, G, B, S, shares, principal, marketValue,
+    enteredAmount, enteredProfit, currentProfit, holdingReturn,
+    hasHolding: shares > 0 && enteredAmount > 0
+  };
 }
 function decideAction(metrics, scores) {
   const profile = riskProfiles[els.risk.value] || riskProfiles.normal;
@@ -142,7 +157,7 @@ function decideAction(metrics, scores) {
   else reasons.push('年线偏离处于可观察区间');
   if (metrics.drawdown >= 15) reasons.push(`距一年高点回撤 ${fmt(metrics.drawdown)}%`);
   if (scores.Q < 40) reasons.push(`历史质量分仅 ${fmt(scores.Q, 0)} 分`);
-  if (scores.W >= 40) reasons.push('当前持仓明显超过计划上限');
+  if (scores.hasHolding && scores.G >= 100) reasons.push(`持有收益率已达到或超过 ${fmt(Math.max(1, num(els.target.value, 20)), 0)}% 目标`);
   if (!Number.isFinite(metrics.r250)) reasons.push('历史不足一年，结论可信度降低');
 
   if (scores.Q < 35 || (metrics.maDeviation < -20 && metrics.r60 < -18)) {
@@ -152,7 +167,7 @@ function decideAction(metrics, scores) {
     return { key: 'sell', tone: 'sell', signal: '分批卖出', title: '分批卖出', detail: '建议按约25%分批执行，避免一次性猜最高点。', reasons };
   }
   if (scores.hasHolding && scores.S >= profile.reduce) {
-    return { key: 'reduce', tone: 'sell', signal: '分批减仓', title: '分批减仓', detail: '建议先减持10%～25%，让仓位回到计划比例。', reasons };
+    return { key: 'reduce', tone: 'sell', signal: '分批减仓', title: '分批减仓', detail: '建议先减持10%～25%，分批锁定收益并降低后续波动。', reasons };
   }
   if (!scores.hasHolding && scores.S >= profile.reduce) {
     return { key: 'pause', tone: 'hold', signal: '暂缓买入', title: '暂缓买入', detail: '位置或短期热度偏高，等待回调或信号降温。', reasons };
@@ -163,7 +178,7 @@ function decideAction(metrics, scores) {
   if (scores.B < profile.buy) {
     return { key: 'hold', tone: 'hold', signal: '持有/分批', title: '已持有继续持有，新资金分批买', detail: '新资金按正常计划的50%～100%投入，不一次性满仓。', reasons };
   }
-  return { key: 'buy', tone: 'buy', signal: '分批买入', title: '分批买入或继续定投', detail: `可按正常定投的${scores.B >= 80 ? '1.25～1.5' : '1～1.25'}倍分批投入，但不得超过计划上限。`, reasons };
+  return { key: 'buy', tone: 'buy', signal: '分批买入', title: '分批买入或继续定投', detail: `可按正常定投的${scores.B >= 80 ? '1.25～1.5' : '1～1.25'}倍分批投入，避免一次性追高。`, reasons };
 }
 function sparkline(history, tone) {
   const values = history.slice(-120).map(item => item.nav).filter(Number.isFinite);
