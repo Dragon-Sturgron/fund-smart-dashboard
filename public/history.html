@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f4f7fd" /><meta name="description" content="根据基金正式历史净值计算买卖辅助信号。" />
+  <title>历史分析｜基智盘</title><link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body data-page="history">
+  <div class="background-orb orb-one"></div><div class="background-orb orb-two"></div>
+  <main class="page-shell">
+    <nav class="top-nav"><a class="brand-link" href="/">基智盘</a><div class="nav-links"><a data-nav="home" href="/">首页</a><a data-nav="realtime" href="/realtime.html">实时行情</a><a data-nav="history" href="/history.html">历史分析</a></div></nav>
+    <header class="hero panel"><div class="hero-copy"><div class="eyebrow"><span></span> HISTORICAL SIGNAL</div><h1>历史净值与买卖分析</h1><p>使用正式历史净值计算近20/60/250日涨跌、年线偏离、回撤、波动率、买入分B与卖出分S，再给出六档操作建议。</p></div><div class="hero-badge"><span class="pulse-dot"></span>建议每周计算，连续两周确认</div></header>
+    <section class="control-panel panel"><div class="control-grid history"><label class="field field-wide"><span>基金代码</span><textarea id="fundCodes" rows="4" placeholder="最多12只基金"></textarea><small>与首页、实时行情页共用列表</small></label><label class="field"><span>我的风险档位</span><select id="riskLevel"><option value="conservative">保守型</option><option value="normal" selected>普通型</option><option value="aggressive">激进型</option></select></label><label class="field"><span>默认止盈目标</span><div class="input-suffix"><input id="targetReturn" type="number" min="1" max="200" value="20" /><b>%</b></div></label></div><div class="button-row"><button id="refreshBtn" class="btn btn-primary" type="button">计算历史信号</button><button id="sampleBtn" class="btn btn-ghost" type="button">填入示例</button><button id="clearBtn" class="btn btn-light" type="button">清空</button><button id="syncNowBtn" class="btn btn-light" type="button">立即同步 KV</button></div><div class="sync-line"><div id="syncStatus" class="sync-status pending"><span></span>正在连接 KV</div><small>历史页优先通过浏览器JSONP读取正式净值，EdgeOne接口作为备用。</small></div><div id="globalMessage" class="global-message" role="status"></div></section>
+    <section class="position-panel panel"><div class="section-title"><div><span class="section-kicker">MY POSITIONS</span><h2>我的持仓（可不填）</h2></div><p>填写后卖出分会加入超配程度和目标收益完成度。</p></div><div id="positionEditor" class="position-editor empty-state-mini">加载历史数据后可填写持仓。</div></section>
+    <section class="market-panel panel"><div class="market-head"><div><span class="section-kicker">SIGNAL OVERVIEW</span><h2>历史信号概览</h2></div><div id="marketStatus" class="market-status neutral"><span></span>等待加载</div></div><p id="marketSummary">读取历史净值后，将根据趋势、回撤、波动和个人仓位生成六档操作建议。</p></section>
+    <section class="stat-grid"><article class="stat-card panel"><span>基金数量</span><strong id="statTotal">0</strong><small>成功加载</small></article><article class="stat-card panel positive"><span>分批买入/定投</span><strong id="statBuy">0</strong><small>买入分达到档位</small></article><article class="stat-card panel warning"><span>持有/暂缓/评估</span><strong id="statWait">0</strong><small>当前以观察为主</small></article><article class="stat-card panel danger"><span>减仓/分批卖出</span><strong id="statSell">0</strong><small>仅已有持仓有意义</small></article></section>
+    <section class="results-panel panel"><div class="section-title"><div><span class="section-kicker">SIGNAL TABLE</span><h2>历史分析与操作建议</h2></div><p>最近计算：<b id="statTime">--:--</b></p></div><div class="table-wrap"><table class="analysis-table"><thead><tr><th>信号</th><th>基金</th><th>最新正式净值</th><th>现在怎么做</th><th>买/卖分</th><th>短中期表现</th><th>趋势/回撤</th><th>原因</th><th>走势</th></tr></thead><tbody id="historyBody"><tr><td colspan="9" class="table-empty">输入基金代码后点击“计算历史信号”。</td></tr></tbody></table></div><div id="mobileHistoryCards" class="mobile-cards"></div></section>
+    <section class="formula-panel panel"><details><summary>查看本页采用的量化规则</summary><div class="formula-content"><div><h3>买入分 B</h3><code>30%×便宜程度 + 15%×回撤机会 + 20%×趋势健康 + 20%×质量分 + 15%×低波动分 − 15%×短期过热</code></div><div><h3>卖出分 S</h3><code>30%×位置百分位 + 20%×短期过热 + 25%×超配程度 + 15%×目标完成度 + 10%×波动风险</code></div><p>网页中的位置百分位来自近一年净值位置，不等同于指数市盈率或市净率估值。模型不能预测未来，只用于统一执行纪律。</p></div></details></section>
+    <footer><p>历史表现不代表未来收益；基金有风险，投资需谨慎。</p></footer>
+  </main>
+  <div id="loadingOverlay" class="loading-overlay" hidden><div class="loader-card"><div class="spinner"></div><strong>正在读取历史净值</strong><span id="loadingText">请稍候</span></div></div>
+  <script type="module" src="/assets/history.js"></script>
+</body>
+</html>

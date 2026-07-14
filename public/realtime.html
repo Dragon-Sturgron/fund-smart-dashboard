@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f4f7fd" /><meta name="description" content="查看基金盘中估算实时行情。" />
+  <title>实时行情｜基智盘</title><link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body data-page="realtime">
+  <div class="background-orb orb-one"></div><div class="background-orb orb-two"></div>
+  <main class="page-shell">
+    <nav class="top-nav"><a class="brand-link" href="/">基智盘</a><div class="nav-links"><a data-nav="home" href="/">首页</a><a data-nav="realtime" href="/realtime.html">实时行情</a><a data-nav="history" href="/history.html">历史分析</a></div></nav>
+    <header class="hero panel"><div class="hero-copy"><div class="eyebrow"><span></span> INTRADAY VIEW</div><h1>基金实时行情</h1><p>只看今天的盘中估算涨跌与更新时间。该页面优先使用浏览器JSONP直连，EdgeOne接口作为备用，避免原先的“Failed to fetch”导致整页不可用。</p></div><div class="hero-badge"><span class="pulse-dot"></span>盘中估算，不是正式净值</div></header>
+    <section class="control-panel panel"><div class="control-grid two"><label class="field field-wide"><span>基金代码</span><textarea id="fundCodes" rows="4" placeholder="最多12只基金"></textarea><small>与首页、历史分析页共用列表</small></label><label class="field"><span>自动刷新</span><select id="refreshInterval"><option value="0">关闭</option><option value="30">30秒</option><option value="60" selected>60秒</option><option value="120">2分钟</option></select></label></div><div class="button-row"><button id="refreshBtn" class="btn btn-primary" type="button">刷新实时行情</button><button id="sampleBtn" class="btn btn-ghost" type="button">填入示例</button><button id="clearBtn" class="btn btn-light" type="button">清空</button><button id="syncNowBtn" class="btn btn-light" type="button">立即同步 KV</button></div><div class="sync-line"><div id="syncStatus" class="sync-status pending"><span></span>正在连接 KV</div><small>实时页不参与长期买卖评分；需要买卖结论请进入历史分析。</small></div><div id="globalMessage" class="global-message" role="status"></div></section>
+    <section class="market-panel panel"><div class="market-head"><div><span class="section-kicker">TODAY</span><h2>观察列表盘中状态</h2></div><div id="marketStatus" class="market-status neutral"><span></span>等待加载</div></div><p id="marketSummary">刷新后将汇总观察列表的盘中估算表现。</p></section>
+    <section class="stat-grid"><article class="stat-card panel"><span>成功加载</span><strong id="statTotal">0</strong><small>当前基金数量</small></article><article class="stat-card panel positive"><span>上涨</span><strong id="statUp">0</strong><small>估算涨幅大于0</small></article><article class="stat-card panel negative"><span>下跌</span><strong id="statDown">0</strong><small>估算涨幅小于0</small></article><article class="stat-card panel"><span>最近刷新</span><strong id="statTime">--:--</strong><small>本机时间</small></article></section>
+    <section class="results-panel panel"><div class="section-title"><div><span class="section-kicker">REALTIME TABLE</span><h2>盘中估算行情</h2></div><p>红色表示上涨，绿色表示下跌。</p></div><div class="table-wrap"><table class="data-table"><thead><tr><th>基金</th><th>估算涨跌</th><th>估算净值</th><th>上一净值</th><th>更新时间</th><th>数据来源</th><th>当日状态</th><th>操作</th></tr></thead><tbody id="realtimeBody"><tr><td colspan="8" class="table-empty">输入基金代码后点击“刷新实时行情”。</td></tr></tbody></table></div><div id="mobileRealtimeCards" class="mobile-cards"></div></section>
+    <footer><p>实时估算根据公开持仓和盘中行情计算，主动基金调仓后可能与晚间正式净值存在偏差。</p></footer>
+  </main>
+  <div id="loadingOverlay" class="loading-overlay" hidden><div class="loader-card"><div class="spinner"></div><strong>正在拉取实时行情</strong><span id="loadingText">请稍候</span></div></div>
+  <script type="module" src="/assets/realtime.js"></script>
+</body>
+</html>
