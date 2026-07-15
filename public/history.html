@@ -19,12 +19,12 @@
       <div class="page-tabs" role="tablist" aria-label="页面切换">
         <a class="page-tab" data-nav="realtime" href="/realtime.html?v=2.5.1" role="tab" aria-selected="false"><span class="tab-mark live-mark" aria-hidden="true"></span><span><b>实时行情页</b><small>查看今天涨跌</small></span></a>
         <a class="page-tab" data-nav="history" href="/history.html?v=2.5.1" role="tab" aria-selected="false"><span class="tab-mark history-mark" aria-hidden="true"></span><span><b>历史分析页</b><small>计算买卖信号</small></span></a>
-        <a class="page-tab" data-nav="settings" href="/settings-v251.html?v=2.5.1" role="tab" aria-selected="false"><span class="tab-mark settings-mark" aria-hidden="true"></span><span><b>设置</b><small>基金与个人持仓</small></span></a>
+        <a class="page-tab" data-nav="settings" href="/settings.html?v=2.6.1" role="tab" aria-selected="false"><span class="tab-mark settings-mark" aria-hidden="true"></span><span><b>设置</b><small>基金与个人持仓</small></span></a>
       </div>
     </nav>
     <header class="hero panel"><div class="hero-copy"><div class="eyebrow"><span></span> HISTORICAL SIGNAL</div><h1>历史净值与买卖分析</h1><p>读取“设置”页保存的基金和个人持仓，计算近20/60/250日涨跌、年线偏离、回撤、波动率、买入分B与卖出分S，再给出六档操作建议。</p></div><div class="hero-badge"><span class="pulse-dot"></span>建议每周计算，连续两周确认</div></header>
     <section class="control-panel panel">
-      <div class="saved-list-row"><div><span class="section-kicker">SAVED FUNDS</span><h2>分析对象</h2><p id="savedFundSummary" class="muted">正在读取设置……</p></div><a class="btn btn-ghost" href="/settings-v251.html?v=2.5.1">管理基金与持仓</a></div>
+      <div class="saved-list-row"><div><span class="section-kicker">SAVED FUNDS</span><h2>分析对象</h2><p id="savedFundSummary" class="muted">正在读取设置……</p></div><a class="btn btn-ghost" href="/settings.html?v=2.6.1">管理基金与持仓</a></div>
       <div class="control-grid analysis-controls"><label class="field"><span>我的风险档位</span><select id="riskLevel"><option value="conservative">保守型</option><option value="normal" selected>普通型</option><option value="aggressive">激进型</option></select></label><label class="field"><span>默认止盈目标</span><div class="input-suffix"><input id="targetReturn" type="number" min="1" max="200" value="20" /><b>%</b></div></label></div>
       <div class="button-row"><button id="refreshBtn" class="btn btn-primary" type="button">计算历史信号</button></div>
       <div class="sync-line"><small>基金代码从 KV 读取；风险档位、止盈目标、持有金额、持有收益和持有份额仅保存在当前浏览器。</small></div><div id="globalMessage" class="global-message" role="status"></div>

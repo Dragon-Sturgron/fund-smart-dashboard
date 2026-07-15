@@ -6,27 +6,27 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <meta name="theme-color" content="#f4f7fd" /><meta name="description" content="管理基金代码、持有金额、持有收益和持有份额。" />
-  <title>设置｜基智盘</title><link rel="stylesheet" href="/assets/styles.css?v=2.5.1-live-holdings1" />
-  <link rel="modulepreload" href="/assets/common.js?v=2.5.1-live-holdings1" />
-  <link rel="prefetch" href="/realtime.html?v=2.5.1" />
-  <link rel="prefetch" href="/history.html?v=2.5.1" />
+  <title>设置｜基智盘</title><link rel="stylesheet" href="/assets/styles.css?v=2.6.1-manual-shares" />
+  <link rel="modulepreload" href="/assets/common.js?v=2.6.1-manual-shares" />
+  <link rel="prefetch" href="/realtime.html?v=2.6.1" />
+  <link rel="prefetch" href="/history.html?v=2.6.1" />
 </head>
 <body data-page="settings">
   <div class="background-orb orb-one"></div><div class="background-orb orb-two"></div>
   <main class="page-shell">
     <nav class="top-nav" aria-label="页面导航">
-      <a class="brand-link" href="/realtime.html?v=2.5.1" aria-label="基智盘首页">基智盘</a>
+      <a class="brand-link" href="/realtime.html?v=2.6.1" aria-label="基智盘首页">基智盘</a>
       <div class="page-tabs" role="tablist" aria-label="页面切换">
-        <a class="page-tab" data-nav="realtime" href="/realtime.html?v=2.5.1" role="tab" aria-selected="false"><span class="tab-mark live-mark" aria-hidden="true"></span><span><b>实时行情页</b><small>查看今天涨跌</small></span></a>
-        <a class="page-tab" data-nav="history" href="/history.html?v=2.5.1" role="tab" aria-selected="false"><span class="tab-mark history-mark" aria-hidden="true"></span><span><b>历史分析页</b><small>计算买卖信号</small></span></a>
-        <a class="page-tab" data-nav="settings" href="/settings-v251.html?v=2.5.1" role="tab" aria-selected="false"><span class="tab-mark settings-mark" aria-hidden="true"></span><span><b>设置</b><small>基金与个人持仓</small></span></a>
+        <a class="page-tab" data-nav="realtime" href="/realtime.html?v=2.6.1" role="tab" aria-selected="false"><span class="tab-mark live-mark" aria-hidden="true"></span><span><b>实时行情页</b><small>查看今天涨跌</small></span></a>
+        <a class="page-tab" data-nav="history" href="/history.html?v=2.6.1" role="tab" aria-selected="false"><span class="tab-mark history-mark" aria-hidden="true"></span><span><b>历史分析页</b><small>计算买卖信号</small></span></a>
+        <a class="page-tab" data-nav="settings" href="/settings.html?v=2.6.1" role="tab" aria-selected="false"><span class="tab-mark settings-mark" aria-hidden="true"></span><span><b>设置</b><small>基金与个人持仓</small></span></a>
       </div>
     </nav>
-    <header class="hero panel"><div class="hero-copy"><div class="eyebrow"><span></span> FUND SETTINGS</div><h1>基金与个人持仓设置</h1><p>添加基金时填写基金代码、持有金额和持有收益，系统读取该基金最新可用净值并自动计算持有份额。基金代码同步到 EdgeOne KV，个人持仓只保存在当前浏览器。</p></div><div class="hero-badge"><span class="pulse-dot"></span>代码同步 KV · 持仓仅本机 · v2.5.1 盘中持仓自动更新版</div></header>
-    <section class="stat-grid"><article class="stat-card panel"><span>基金数量</span><strong id="statFundCount">0</strong><small>最多 12 只</small></article><article class="stat-card panel positive"><span>已填写持仓</span><strong id="statHoldingCount">0</strong><small>金额与份额均已计算</small></article><article class="stat-card panel"><span>累计持有金额</span><strong id="statHoldingAmount">¥0</strong><small>按盘中估算自动更新</small></article><article class="stat-card panel warning"><span>累计持有收益</span><strong id="statHoldingProfit">¥0</strong><small>按盘中估算每 60 秒更新</small></article></section>
+    <header class="hero panel"><div class="hero-copy"><div class="eyebrow"><span></span> FUND SETTINGS</div><h1>基金与个人持仓设置</h1><p>添加基金时填写基金代码、持有金额、持有收益和基金平台显示的实际持有份额。持有份额可在列表中随时修改；系统只根据固定份额更新盘中持有金额和持有收益。基金代码同步到 EdgeOne KV，个人持仓只保存在当前浏览器。</p></div><div class="hero-badge"><span class="pulse-dot"></span>代码同步 KV · 实际份额可编辑 · v2.6.1 最终修正版</div></header>
+    <section class="stat-grid"><article class="stat-card panel"><span>基金数量</span><strong id="statFundCount">0</strong><small>最多 12 只</small></article><article class="stat-card panel positive"><span>已填写持仓</span><strong id="statHoldingCount">0</strong><small>实际份额已填写</small></article><article class="stat-card panel"><span>累计持有金额</span><strong id="statHoldingAmount">¥0</strong><small>按盘中估算自动更新</small></article><article class="stat-card panel warning"><span>累计持有收益</span><strong id="statHoldingProfit">¥0</strong><small>按盘中估算每 60 秒更新</small></article></section>
     <section class="results-panel panel">
       <div class="section-title"><div><span class="section-kicker">MY FUNDS</span><h2>基金列表与个人持仓</h2></div><div class="inline-actions"><button id="openAddModalBtn" class="btn btn-ghost" type="button">新增基金</button><button id="saveAllBtn" class="btn btn-primary" type="button">保存全部持仓</button><button id="clearAllBtn" class="btn btn-light danger-outline" type="button">清空全部</button></div></div>
-      <div class="settings-help"><b>持有金额</b>与<b>持有收益</b>会按照“持有份额 × 盘中估算净值”自动变化，页面打开期间每 60 秒更新一次；收盘或无盘中估算时使用上一确认净值。手动修改后点击<b>保存全部持仓</b>可重设投入本金和份额基准。</div>
+      <div class="settings-help"><b>持有金额</b>与<b>持有收益</b>会按照“持有份额 × 盘中估算净值”自动变化，页面打开期间每 60 秒更新一次；收盘或无盘中估算时使用上一确认净值。可直接修改<b>持有金额、持有收益和实际持有份额</b>；点击<b>保存全部持仓</b>后，以你填写的份额为准重新计算盘中持有金额和持有收益，系统不会再反向覆盖份额。</div>
       <div class="settings-tools">
         <div class="settings-tools-actions"><button id="recognizeBtn" class="btn btn-light btn-small" type="button">重新识别基金名称</button><button id="syncNowBtn" class="btn btn-light btn-small" type="button">同步基金列表 KV</button></div>
         <div class="sync-line compact-sync-line"><div id="syncStatus" class="sync-status pending"><span></span>正在连接 KV</div><small>KV 只保存基金代码；持有金额、持有收益和持有份额只保存在当前浏览器。</small></div>
@@ -35,7 +35,7 @@
       <div class="table-wrap settings-table-wrap"><table class="settings-table"><thead><tr><th>基金</th><th>持有金额（元）</th><th>持有收益（元）</th><th>持有份额</th><th>持仓状态</th><th>操作</th></tr></thead><tbody id="settingsBody"><tr><td colspan="6" class="table-empty">尚未添加基金代码。</td></tr></tbody></table></div>
       <div id="mobileSettingsCards" class="mobile-cards"></div>
     </section>
-    <footer><p><b>当前页面版本：v2.5.1 盘中持仓自动更新版</b> · 持有金额与持有收益为盘中估算值，仅保存在当前浏览器；基金代码可从 KV 跨设备恢复。</p></footer>
+    <footer><p><b>当前页面版本：v2.6.1 实际份额可编辑最终版</b> · 实际持有份额可编辑并固定保存；持有金额与持有收益按盘中估算更新，仅保存在当前浏览器；基金代码可从 KV 跨设备恢复。</p></footer>
   </main>
   <div id="addFundModal" class="modal-shell" hidden aria-hidden="true">
     <div class="modal-backdrop" aria-hidden="true"></div>
@@ -45,13 +45,14 @@
         <label class="field"><span>基金代码</span><input id="newFundCode" type="text" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="例如：005827" /><small>请输入六位基金代码。</small></label>
         <label class="field"><span>持有金额（元）</span><input id="newHoldingAmount" type="number" min="0.01" step="0.01" placeholder="例如：10500" /><small>填写当前页面显示的持有金额。</small></label>
         <label class="field"><span>持有收益（元）</span><input id="newHoldingProfit" type="number" step="0.01" placeholder="例如：500 或 -300" /><small>盈利填正数，亏损填负数，没有收益时填写 0。</small></label>
+        <label class="field"><span>实际持有份额</span><input id="newHoldingShares" type="number" min="0.01" step="0.01" placeholder="例如：47.78" /><small>请填写基金购买平台显示的真实份额，四舍五入保留两位小数。</small></label>
       </div>
-      <div class="calculation-note"><b>份额计算：</b>持有份额 = 持有金额 ÷ 上一确认净值；盘中估算净值不参与份额计算，持有收益仅用于反推投入本金和平均持仓成本。</div>
+      <div class="calculation-note"><b>最终规则：</b>实际持有份额由你填写并固定保存；投入本金 = 持有金额 − 持有收益；后续盘中持有金额 = 实际份额 × 盘中估算净值，盘中持有收益 = 盘中持有金额 − 投入本金。</div>
       <div id="addModalMessage" class="global-message" role="status"></div>
       <div class="modal-actions"><button id="cancelAddModalBtn" class="btn btn-light" type="button">取消</button><button id="addAndContinueBtn" class="btn btn-ghost" type="button">添加并继续</button><button id="addFundsBtn" class="btn btn-primary" type="button">添加基金并关闭</button></div>
     </section>
   </div>
   <div id="loadingOverlay" class="loading-overlay" hidden><div class="loader-card"><div class="spinner"></div><strong>正在读取基金净值</strong><span id="loadingText">请稍候</span></div></div>
-  <script type="module" src="/assets/settings.js?v=2.5.1-live-holdings1"></script>
+  <script type="module" src="/assets/settings.js?v=2.6.1-manual-shares"></script>
 </body>
 </html>

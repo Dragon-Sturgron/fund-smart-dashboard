@@ -1,6 +1,6 @@
 {
   "name": "fund-smart-dashboard",
-  "version": "2.5.1-live-holdings1",
-  "feature": "holding-amount-and-profit-follow-intraday-estimated-nav",
+  "version": "2.6.1-manual-shares",
+  "feature": "editable-manual-shares-and-live-holding-recalculation",
   "settingsPage": "/settings.html"
 }

@@ -1,9 +1,9 @@
 {
   "name": "fund-smart-dashboard",
-  "version": "2.5.1-live-holdings1",
+  "version": "2.6.1-manual-shares",
   "private": true,
   "type": "module",
-  "description": "基智盘 v2.5.1：持有金额和持有收益根据持有份额与盘中估算净值每60秒自动更新。",
+  "description": "基智盘 v2.6.1：实际持有份额可手动编辑并固定，盘中行情只更新持有金额和持有收益。",
   "scripts": {
     "check": "node --check public/assets/common.js && node --check public/assets/home.js && node --check public/assets/realtime.js && node --check public/assets/history.js && node --check public/assets/settings.js && node --check edge-functions/api/_shared.js && node --check edge-functions/api/_fund-data.js && node --check edge-functions/api/realtime/[code].js && node --check edge-functions/api/history/[code].js && node --check edge-functions/api/batch/realtime.js && node --check edge-functions/api/batch/history.js && node --check edge-functions/api/name/[code].js && node --check edge-functions/api/batch/names.js && node --check edge-functions/api/config.js && node --check edge-functions/api/health.js",
     "serve": "python -m http.server 4173 -d public"

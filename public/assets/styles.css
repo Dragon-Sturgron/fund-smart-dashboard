@@ -125,6 +125,9 @@ textarea:focus, input:focus, select:focus { border-color: #9bb0ff; box-shadow: 0
 .calculated-share { display: grid; gap: 3px; min-width: 120px; }
 .calculated-share b { font-size: 14px; }
 .calculated-share small { color: var(--muted); font-size: 10px; }
+.editable-share { display: grid; gap: 4px; min-width: 150px; }
+.editable-share small { color: var(--muted); font-size: 10px; line-height: 1.45; }
+
 .mobile-calculated-field { display: grid; gap: 8px; padding: 11px 12px; border-radius: 12px; background: #f5f7fb; }
 .mobile-calculated-field > span { font-size: 12px; font-weight: 800; color: #66758a; }
 .settings-table { min-width: 900px; }

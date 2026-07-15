@@ -1,13 +1,13 @@
 import {
-  $, activateCurrentNav, cacheHistory, cacheRealtime, escapeHtml, fetchHistoryMany,
-  fetchFundNamesMany, fetchRealtimeMany, fmt, getCachedRealtime, initializeCloud, isUsableFundName, money, num,
+  $, activateCurrentNav, cacheRealtime, escapeHtml,
+  fetchFundNamesMany, fetchRealtimeMany, fmt, initializeCloud, isUsableFundName, money, num,
   parseCodes, prefetchHistory, readLocalState, retryCloudSync, saveAndSync,
   schedulePagePrefetch, setGlobalMessage, setLoading, updateFundMeta, writeLocalState
 } from './common.js';
 
 const MAX_FUNDS = 12;
 const els = {
-  newCode: $('#newFundCode'), newAmount: $('#newHoldingAmount'), newProfit: $('#newHoldingProfit'),
+  newCode: $('#newFundCode'), newAmount: $('#newHoldingAmount'), newProfit: $('#newHoldingProfit'), newShares: $('#newHoldingShares'),
   openAdd: $('#openAddModalBtn'), add: $('#addFundsBtn'), addContinue: $('#addAndContinueBtn'), closeAdd: $('#closeAddModalBtn'), cancelAdd: $('#cancelAddModalBtn'),
   addModal: $('#addFundModal'), addModalMessage: $('#addModalMessage'), recognize: $('#recognizeBtn'), syncNow: $('#syncNowBtn'),
   sync: $('#syncStatus'), message: $('#globalMessage'), body: $('#settingsBody'),
@@ -27,6 +27,7 @@ function clearAddForm() {
   els.newCode.value = '';
   els.newAmount.value = '';
   els.newProfit.value = '';
+  els.newShares.value = '';
 }
 
 function openAddModal() {
@@ -107,24 +108,22 @@ function calculationNav(position) {
   return num(position.costNav, 0);
 }
 
-function calculatePosition(holdingAmount, holdingProfit, nav, previous = {}, quoteMeta = {}) {
+function calculatePosition(holdingAmount, holdingProfit, sharesValue, previous = {}) {
   const amount = num(holdingAmount, 0);
   const profit = num(holdingProfit, 0);
-  const usedNav = num(nav, 0);
-  const shares = amount > 0 && usedNav > 0 ? roundHalfUp(amount / usedNav, 2) : 0;
+  const shares = roundHalfUp(num(sharesValue, 0), 2);
   const principal = amount - profit;
   const costNav = shares > 0 && principal > 0 ? principal / shares : 0;
   return {
     ...previous,
-    holdingAmount: amount > 0 ? Number(amount.toFixed(2)) : '',
-    holdingProfit: hasInputValue(holdingProfit) ? Number(profit.toFixed(2)) : '',
-    shares: shares > 0 ? roundHalfUp(shares, 2) : '',
-    navAtCalculation: usedNav > 0 ? Number(usedNav.toFixed(6)) : '',
-    principal: principal > 0 ? Number(principal.toFixed(2)) : '',
+    holdingAmount: amount > 0 ? roundHalfUp(amount, 2) : '',
+    holdingProfit: hasInputValue(holdingProfit) ? roundHalfUp(profit, 2) : '',
+    shares: shares > 0 ? shares : '',
+    principal: principal > 0 ? roundHalfUp(principal, 2) : '',
     costNav: costNav > 0 ? Number(costNav.toFixed(6)) : '',
     calculatedAt: new Date().toISOString(),
-    shareBasis: quoteMeta.shareBasis || previous.shareBasis || '',
-    navSource: quoteMeta.navSource || previous.navSource || ''
+    shareBasis: shares > 0 ? 'manual-shares' : '',
+    navSource: shares > 0 ? '用户填写实际份额' : ''
   };
 }
 
@@ -185,8 +184,8 @@ function updatePositionInputsInDom(code, position) {
 function holdingStatus(position) {
   const amount = num(position.holdingAmount, 0);
   const shares = num(position.shares, 0);
-  if (amount > 0 && shares > 0 && hasInputValue(position.holdingProfit)) return { label: '份额已计算', tone: 'buy' };
-  if (amount > 0) return { label: '待计算份额', tone: 'hold' };
+  if (amount > 0 && shares > 0 && hasInputValue(position.holdingProfit)) return { label: '真实份额已保存', tone: 'buy' };
+  if (amount > 0) return { label: '待填写实际份额', tone: 'hold' };
   return { label: '未填写', tone: 'hold' };
 }
 
@@ -195,11 +194,16 @@ function inputMarkup(code, key, value, placeholder, { signed = false } = {}) {
   return `<input class="position-input" data-code="${code}" data-pos="${key}" type="number"${min} step="0.01" value="${escapeHtml(value ?? '')}" placeholder="${placeholder}">`;
 }
 
-function shareMarkup(position) {
+function shareMarkup(code, position) {
   const shares = num(position.shares, 0);
-  const nav = calculationNav(position);
-  if (!(shares > 0)) return '<span class="muted">待计算</span>';
-  return `<div class="calculated-share"><b>${fmt(shares, 2)}</b><small>按确认净值 ${fmt(nav, 4)}</small></div>`;
+  const value = shares > 0 ? roundHalfUp(shares, 2).toFixed(2) : '';
+  const quoteNote = num(position.liveNav, 0) > 0
+    ? `盘中金额按${escapeHtml(position.liveSource || '参考净值')} ${fmt(position.liveNav, 4)} 更新`
+    : '请填写购买平台显示的实际份额';
+  return `<div class="editable-share">
+    ${inputMarkup(code, 'shares', value, '例如 47.78')}
+    <small>${quoteNote}；份额不会被行情覆盖</small>
+  </div>`;
 }
 
 function render() {
@@ -217,7 +221,7 @@ function render() {
         <td><div class="fund-name">${escapeHtml(name)}</div><div class="fund-code">${code}</div></td>
         <td>${inputMarkup(code, 'holdingAmount', position.holdingAmount, '例如 10500')}</td>
         <td>${inputMarkup(code, 'holdingProfit', position.holdingProfit, '例如 500 或 -300', { signed: true })}</td>
-        <td>${shareMarkup(position)}</td>
+        <td>${shareMarkup(code, position)}</td>
         <td><span class="signal-pill ${status.tone}">${status.label}</span></td>
         <td><button class="btn btn-light btn-small danger-outline" data-remove="${code}" type="button">删除</button></td>
       </tr>`;
@@ -232,7 +236,7 @@ function render() {
         <div class="settings-mobile-fields">
           <label class="field"><span>持有金额（元）</span>${inputMarkup(code, 'holdingAmount', position.holdingAmount, '例如 10500')}</label>
           <label class="field"><span>持有收益（元）</span>${inputMarkup(code, 'holdingProfit', position.holdingProfit, '例如 500 或 -300', { signed: true })}</label>
-          <div class="mobile-calculated-field"><span>持有份额</span>${shareMarkup(position)}</div>
+          <div class="mobile-calculated-field"><span>持有份额</span>${shareMarkup(code, position)}</div>
         </div>
         <button class="btn btn-light full-btn danger-outline" data-remove="${code}" type="button">删除这只基金</button>
       </article>`;
@@ -266,8 +270,7 @@ function syncPositionInput(input) {
 
 function bindDynamicEvents() {
   document.querySelectorAll('.position-input').forEach(input => {
-    // 表格与手机卡片互相同步输入值，但不提前计算份额。
-    // 只有点击“保存全部持仓”后，才重新读取确认净值并统一计算。
+    // 表格与手机卡片互相同步输入值。实际份额由用户直接填写，保存后固定不变。
     input.addEventListener('input', event => {
       const current = event.currentTarget;
       syncPositionInput(current);
@@ -286,10 +289,12 @@ function collectPositionDraftsFromInputs() {
     const previous = positionFor(state, code);
     const amountInput = document.querySelector(`input[data-code="${code}"][data-pos="holdingAmount"]`);
     const profitInput = document.querySelector(`input[data-code="${code}"][data-pos="holdingProfit"]`);
+    const sharesInput = document.querySelector(`input[data-code="${code}"][data-pos="shares"]`);
     drafts[code] = {
       previous,
       amount: cleanPositiveInput(amountInput?.value ?? previous.holdingAmount ?? ''),
-      profit: cleanSignedInput(profitInput?.value ?? previous.holdingProfit ?? '')
+      profit: cleanSignedInput(profitInput?.value ?? previous.holdingProfit ?? ''),
+      shares: cleanPositiveInput(sharesInput?.value ?? previous.shares ?? '')
     };
   }
   return drafts;
@@ -411,60 +416,14 @@ async function recognizeNames(codes = parseCodes(readLocalState().codes), { quie
   }
 }
 
-async function resolveFundQuote(code) {
-  // 持有金额在基金平台盘中通常仍按“上一确认净值”展示。
-  // 盘中估算净值会不断变化，不能用于反推固定持有份额。
-  const realtime = await fetchRealtimeMany([code]);
-  const live = realtime.items[0];
-  if (live) {
-    cacheRealtime([live]);
-    const confirmedNav = num(live.previousNav, 0);
-    if (confirmedNav > 0) {
-      return {
-        nav: confirmedNav,
-        item: live,
-        source: '上一确认净值',
-        shareBasis: 'confirmed-nav'
-      };
-    }
-  }
-
-  const cached = getCachedRealtime([code])[0];
-  if (cached) {
-    const confirmedNav = num(cached.previousNav, 0);
-    if (confirmedNav > 0) {
-      return {
-        nav: confirmedNav,
-        item: cached,
-        source: '本机缓存的上一确认净值',
-        shareBasis: 'confirmed-nav'
-      };
-    }
-  }
-
-  const history = await fetchHistoryMany([code]);
-  const item = history.items[0];
-  const latest = item?.history?.at(-1);
-  if (item && num(latest?.nav, 0) > 0) {
-    cacheHistory([item]);
-    return {
-      nav: num(latest.nav),
-      item,
-      source: '最新正式净值',
-      shareBasis: 'confirmed-nav'
-    };
-  }
-
-  const message = realtime.errors[0]?.message || history.errors[0]?.message || '无法获取可用于计算份额的确认净值';
-  throw new Error(message);
-}
-
 async function addFund({ keepOpen = false } = {}) {
   const code = String(els.newCode.value || '').trim();
   const amountRaw = els.newAmount.value;
   const profitRaw = els.newProfit.value;
+  const sharesRaw = els.newShares.value;
   const amount = Number(amountRaw);
   const profit = Number(profitRaw);
+  const shares = Number(sharesRaw);
 
   if (!/^\d{6}$/.test(code)) {
     setGlobalMessage(els.addModalMessage, '请输入正确的六位基金代码。', 'error');
@@ -478,8 +437,12 @@ async function addFund({ keepOpen = false } = {}) {
     setGlobalMessage(els.addModalMessage, '请填写持有收益；没有收益时填写 0，亏损时填写负数。', 'error');
     return;
   }
+  if (!Number.isFinite(shares) || shares <= 0) {
+    setGlobalMessage(els.addModalMessage, '请填写基金购买平台显示的实际持有份额。', 'error');
+    return;
+  }
   if (amount - profit <= 0) {
-    setGlobalMessage(els.addModalMessage, '持有收益不能大于或等于持有金额，否则无法反推有效投入本金。', 'error');
+    setGlobalMessage(els.addModalMessage, '持有收益不能大于或等于持有金额，否则无法得到有效投入本金。', 'error');
     return;
   }
 
@@ -490,37 +453,45 @@ async function addFund({ keepOpen = false } = {}) {
     return;
   }
 
-  setLoading(els.overlay, els.loadingText, true, `正在读取基金 ${code} 的确认净值`);
+  setLoading(els.overlay, els.loadingText, true, `正在保存基金 ${code} 的实际持有份额`);
   try {
-    const quote = await resolveFundQuote(code);
     const codes = existing.includes(code) ? existing : [...existing, code];
     const positions = { ...(state.positions || {}) };
-    const basePosition = calculatePosition(amount, profit, quote.nav, positionFor(state, code), { shareBasis: quote.shareBasis, navSource: quote.source });
-    positions[code] = applyLiveQuoteToPosition(basePosition, quote.item || {});
-    saveAndSync({ codes: codes.join('\n'), positions });
-    updateFundMeta([{ ...quote.item, code }]);
+    positions[code] = calculatePosition(amount, profit, shares, positionFor(state, code));
 
+    try {
+      const realtime = await fetchRealtimeMany([code]);
+      const item = realtime.items[0];
+      if (item) {
+        cacheRealtime([item]);
+        updateFundMeta([item]);
+        positions[code] = applyLiveQuoteToPosition(positions[code], item);
+      }
+    } catch {
+      // 行情失败不影响基金和实际份额保存。
+    }
+
+    saveAndSync({ codes: codes.join('\n'), positions });
     clearAddForm();
     render();
-    const shares = num(positions[code].shares, 0);
+
+    const savedShares = num(positions[code].shares, 0);
     const actionText = existing.includes(code) ? '已更新' : '已添加';
-    const successText = `${actionText}基金 ${code}，按${quote.source} ${fmt(quote.nav, 4)} 计算持有份额 ${fmt(shares, 2)}；持有金额和持有收益已按盘中估算自动更新，基金代码将同步到 KV。`;
+    const successText = `${actionText}基金 ${code}，实际持有份额已固定为 ${fmt(savedShares, 2)}；后续行情只更新持有金额和持有收益。`;
     setGlobalMessage(els.message, successText, 'success');
 
     if (keepOpen) {
       const reachedLimit = codes.length >= MAX_FUNDS;
-      setGlobalMessage(
-        els.addModalMessage,
-        reachedLimit ? `${successText} 当前已达到 ${MAX_FUNDS} 只基金上限。` : `${successText} 可继续填写下一只基金。`,
-        'success'
-      );
+      setGlobalMessage(els.addModalMessage, reachedLimit ? `${successText} 当前已达到 ${MAX_FUNDS} 只基金上限。` : `${successText} 可继续填写下一只基金。`, 'success');
       requestAnimationFrame(() => els.newCode.focus());
     } else {
       closeAddModal();
     }
+
+    recognizeNames([code], { quiet: true, background: true });
     prefetchHistory([code]);
   } catch (error) {
-    setGlobalMessage(els.addModalMessage, `添加失败：${error.message}。未取得确认净值时不会生成错误的持有份额。`, 'error');
+    setGlobalMessage(els.addModalMessage, `添加失败：${error.message}`, 'error');
   } finally {
     setLoading(els.overlay, els.loadingText, false);
   }
@@ -547,55 +518,6 @@ function normalizeStoredSharePrecision() {
   return changed;
 }
 
-async function repairLegacyShareCalculations() {
-  const state = readLocalState();
-  const codes = parseCodes(state.codes).filter(code => {
-    const position = positionFor(state, code);
-    return num(position.holdingAmount, 0) > 0
-      && num(position.shares, 0) > 0
-      && position.shareBasis !== 'confirmed-nav';
-  });
-  if (!codes.length) return;
-
-  const positions = { ...(state.positions || {}) };
-  const repaired = [];
-  const failed = [];
-
-  await Promise.all(codes.map(async code => {
-    try {
-      const quote = await resolveFundQuote(code);
-      const previous = positionFor(state, code);
-      positions[code] = calculatePosition(
-        previous.holdingAmount,
-        previous.holdingProfit,
-        quote.nav,
-        previous,
-        { shareBasis: quote.shareBasis, navSource: quote.source }
-      );
-      repaired.push(code);
-    } catch (error) {
-      failed.push({ code, message: error.message });
-    }
-  }));
-
-  if (repaired.length) {
-    writeLocalState({ positions });
-    render();
-    setGlobalMessage(
-      els.message,
-      `已按上一确认净值自动修正 ${repaired.length} 只基金的持有份额。`,
-      'success'
-    );
-  }
-  if (failed.length && !repaired.length) {
-    setGlobalMessage(
-      els.message,
-      `暂时无法修正份额：${failed.map(item => `${item.code}：${item.message}`).join('；')}`,
-      'error'
-    );
-  }
-}
-
 function removeFund(code) {
   const state = readLocalState();
   const name = state.fundMeta?.[code]?.name || code;
@@ -616,17 +538,18 @@ async function saveAll() {
   const drafts = collectPositionDraftsFromInputs();
   const positions = { ...(state.positions || {}) };
   const validationErrors = [];
-  const targets = [];
+  const savedCodes = [];
   const clearedCodes = [];
 
   for (const code of codes) {
     if (!dirtyPositionCodes.has(code)) continue;
-    const { previous, amount, profit } = drafts[code];
+    const { previous, amount, profit, shares } = drafts[code];
     const amountNumber = Number(amount);
     const profitNumber = Number(profit);
+    const sharesNumber = Number(shares);
 
-    if (amount === '' && profit === '') {
-      positions[code] = calculatePosition('', '', 0, previous);
+    if (amount === '' && profit === '' && shares === '') {
+      positions[code] = calculatePosition('', '', '', previous);
       clearedCodes.push(code);
       continue;
     }
@@ -638,70 +561,40 @@ async function saveAll() {
       validationErrors.push(`${code}：请填写持有收益，没有收益时填写 0`);
       continue;
     }
+    if (!Number.isFinite(sharesNumber) || sharesNumber <= 0) {
+      validationErrors.push(`${code}：请填写购买平台显示的实际持有份额`);
+      continue;
+    }
     if (amountNumber - profitNumber <= 0) {
       validationErrors.push(`${code}：持有收益不能大于或等于持有金额`);
       continue;
     }
-    targets.push({ code, previous, amount: amountNumber, profit: profitNumber });
+
+    positions[code] = calculatePosition(amountNumber, profitNumber, sharesNumber, previous);
+    savedCodes.push(code);
   }
 
   if (validationErrors.length) {
     setGlobalMessage(els.message, `保存失败：${validationErrors.join('；')}。`, 'error');
     return;
   }
-  if (!targets.length && !clearedCodes.length) {
-    setGlobalMessage(els.message, '没有检测到需要保存的持仓修改。盘中持有金额和持有收益会自动更新，无需重复点击保存。', 'success');
+  if (!savedCodes.length && !clearedCodes.length) {
+    setGlobalMessage(els.message, '没有检测到需要保存的修改。', 'success');
     return;
   }
 
   els.saveAll.disabled = true;
-  setLoading(els.overlay, els.loadingText, true, `正在保存 ${targets.length + clearedCodes.length} 只基金的持仓基准`);
+  setLoading(els.overlay, els.loadingText, true, `正在保存 ${savedCodes.length + clearedCodes.length} 只基金的实际份额`);
   try {
-    const results = await Promise.all(targets.map(async target => {
-      try {
-        const quote = await resolveFundQuote(target.code);
-        const basePosition = calculatePosition(
-          target.amount,
-          target.profit,
-          quote.nav,
-          target.previous,
-          { shareBasis: quote.shareBasis, navSource: quote.source }
-        );
-        return {
-          ok: true,
-          code: target.code,
-          position: applyLiveQuoteToPosition(basePosition, quote.item || {}),
-          quote
-        };
-      } catch (error) {
-        return { ok: false, code: target.code, message: error.message };
-      }
-    }));
-
-    const success = results.filter(item => item.ok);
-    const failed = results.filter(item => !item.ok);
-    for (const item of success) {
-      positions[item.code] = item.position;
-      dirtyPositionCodes.delete(item.code);
-    }
-    for (const code of clearedCodes) dirtyPositionCodes.delete(code);
-
+    for (const code of [...savedCodes, ...clearedCodes]) dirtyPositionCodes.delete(code);
     writeLocalState({ positions });
     render();
 
-    if (failed.length) {
-      setGlobalMessage(
-        els.message,
-        `已保存 ${success.length + clearedCodes.length} 只基金；${failed.length} 只失败：${failed.map(item => `${item.code}：${item.message}`).join('；')}。失败基金保留待保存状态。`,
-        'error'
-      );
-    } else {
-      setGlobalMessage(
-        els.message,
-        `已保存 ${success.length + clearedCodes.length} 只基金的持仓基准。持有份额保持两位小数，持有金额与持有收益已按盘中估算更新，并会每 60 秒继续自动变化。`,
-        'success'
-      );
+    if (savedCodes.length) {
+      await refreshLiveHoldings({ silent: true, codes: savedCodes });
     }
+
+    setGlobalMessage(els.message, `已保存 ${savedCodes.length + clearedCodes.length} 只基金。实际持有份额已固定为你填写的数值；持有金额和持有收益已按最新行情重新计算。`, 'success');
   } finally {
     els.saveAll.disabled = false;
     setLoading(els.overlay, els.loadingText, false);
@@ -741,7 +634,6 @@ initializeCloud({ syncStatus: els.sync, message: els.message }).then(async () =>
   const state = readLocalState();
   const missingNames = parseCodes(state.codes).filter(code => !isUsableFundName(state.fundMeta?.[code]?.name, code));
   if (missingNames.length) await recognizeNames(missingNames, { quiet: true, background: true });
-  await repairLegacyShareCalculations();
   await refreshLiveHoldings({ silent: false });
   startLiveHoldingAutoRefresh();
   schedulePagePrefetch('settings');
