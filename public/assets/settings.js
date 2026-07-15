@@ -14,7 +14,7 @@ const els = {
   mobile: $('#mobileSettingsCards'), saveAll: $('#saveAllBtn'), clearAll: $('#clearAllBtn'),
   overlay: $('#loadingOverlay'), loadingText: $('#loadingText'), statFundCount: $('#statFundCount'),
   statHoldingCount: $('#statHoldingCount'), statHoldingAmount: $('#statHoldingAmount'),
-  statHoldingProfit: $('#statHoldingProfit')
+  statHoldingProfit: $('#statHoldingProfit'), dailyUpdateStatus: $('#dailyUpdateStatus')
 };
 
 let lastFocusedElement = null;
@@ -22,6 +22,8 @@ const dirtyPositionCodes = new Set();
 let liveHoldingTimer = null;
 let liveHoldingRefreshing = false;
 let lastLiveHoldingRefreshAt = 0;
+const DAILY_UPDATE_TIME = '00:00';
+const DAILY_CHECK_INTERVAL = 60 * 1000;
 
 function clearAddForm() {
   els.newCode.value = '';
@@ -301,7 +303,7 @@ function collectPositionDraftsFromInputs() {
 }
 
 async function refreshLiveHoldings({ silent = true, codes = null } = {}) {
-  if (liveHoldingRefreshing || document.hidden) return;
+  if (liveHoldingRefreshing || document.hidden) return { ok: false, skipped: true, updated: 0, errors: 0 };
   const state = readLocalState();
   const requestedCodes = codes ? parseCodes(codes.join(',')) : parseCodes(state.codes);
   const targets = requestedCodes.filter(code => {
@@ -310,7 +312,7 @@ async function refreshLiveHoldings({ silent = true, codes = null } = {}) {
       && num(position.shares, 0) > 0
       && principalFor(position) > 0;
   });
-  if (!targets.length) return;
+  if (!targets.length) return { ok: true, skipped: false, updated: 0, errors: 0, targets: 0 };
 
   liveHoldingRefreshing = true;
   try {
@@ -348,25 +350,91 @@ async function refreshLiveHoldings({ silent = true, codes = null } = {}) {
       if (realtime.errors.length) {
         setGlobalMessage(
           els.message,
-          `盘中持仓已更新 ${realtime.items.length} 只，${realtime.errors.length} 只暂时失败。持有金额与持有收益将按实时估算继续自动变化。`,
+          `今日持仓更新成功 ${realtime.items.length} 只，${realtime.errors.length} 只暂时失败；失败的基金不会标记为今日已完成。`,
           'error'
         );
       } else {
         setGlobalMessage(
           els.message,
-          `已按盘中估算更新 ${realtime.items.length} 只基金的持有金额和持有收益；页面打开期间每 60 秒自动刷新。`,
+          `已更新 ${realtime.items.length} 只基金的持有金额和持有收益；自动更新固定为每天北京时间 00:00 一次。`,
           'success'
         );
       }
     }
+    return {
+      ok: realtime.errors.length === 0,
+      skipped: false,
+      updated: realtime.items.length,
+      errors: realtime.errors.length,
+      targets: targets.length
+    };
+  } catch (error) {
+    if (!silent) setGlobalMessage(els.message, `持仓更新失败：${error.message || '接口暂时不可用'}。`, 'error');
+    return { ok: false, skipped: false, updated: 0, errors: targets.length, targets: targets.length };
   } finally {
     liveHoldingRefreshing = false;
   }
 }
 
-function startLiveHoldingAutoRefresh() {
+function beijingNowParts() {
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+  }).formatToParts(new Date());
+  const map = {};
+  for (const part of parts) if (part.type !== 'literal') map[part.type] = part.value;
+  return {
+    date: `${map.year}-${map.month}-${map.day}`,
+    time: `${map.hour}:${map.minute}`
+  };
+}
+
+function updateDailyStatus(state = readLocalState()) {
+  if (!els.dailyUpdateStatus) return;
+  const lastDate = state.dailyUpdate?.lastDate || '尚未更新';
+  els.dailyUpdateStatus.textContent = `每天北京时间 ${DAILY_UPDATE_TIME} 自动更新一次 · 云端上次完成日期：${lastDate}`;
+}
+
+async function checkDailyMidnightUpdate({ showMessage = false } = {}) {
+  if (document.hidden || liveHoldingRefreshing || dirtyPositionCodes.size > 0) return;
+  const now = beijingNowParts();
+  const state = readLocalState();
+  updateDailyStatus(state);
+  if (state.dailyUpdate?.lastDate === now.date) return;
+  if (now.time < DAILY_UPDATE_TIME) return;
+
+  const result = await refreshLiveHoldings({ silent: !showMessage });
+  if (!result || result.skipped) return;
+  // 全部接口失败时不标记完成，稍后继续尝试；部分成功时只变动一次并记录当天完成。
+  if (result.targets > 0 && result.updated === 0) return;
+
+  const latest = readLocalState();
+  const dailyUpdate = {
+    time: DAILY_UPDATE_TIME,
+    lastDate: now.date,
+    lastAt: new Date().toISOString()
+  };
+  const syncedState = saveAndSync({
+    positions: { ...(latest.positions || {}) },
+    dailyUpdate
+  });
+  updateDailyStatus(syncedState);
+  if (showMessage) {
+    setGlobalMessage(
+      els.message,
+      result.errors > 0
+        ? `今日持仓已在北京时间 ${DAILY_UPDATE_TIME} 执行一次：成功 ${result.updated} 只，失败 ${result.errors} 只；已同步成功数据到 KV，今天不再自动变化。`
+        : `今日持仓已按北京时间 ${DAILY_UPDATE_TIME} 完成更新，并已同步到 KV；今天不再自动变化。`,
+      'success'
+    );
+  }
+}
+
+function startDailyMidnightUpdate() {
   clearInterval(liveHoldingTimer);
-  liveHoldingTimer = setInterval(() => refreshLiveHoldings({ silent: true }), 60 * 1000);
+  updateDailyStatus();
+  liveHoldingTimer = setInterval(() => checkDailyMidnightUpdate(), DAILY_CHECK_INTERVAL);
 }
 
 async function recognizeNames(codes = parseCodes(readLocalState().codes), { quiet = false, background = false } = {}) {
@@ -477,7 +545,7 @@ async function addFund({ keepOpen = false } = {}) {
 
     const savedShares = num(positions[code].shares, 0);
     const actionText = existing.includes(code) ? '已更新' : '已添加';
-    const successText = `${actionText}基金 ${code}，实际持有份额已固定为 ${fmt(savedShares, 2)}；后续行情只更新持有金额和持有收益。`;
+    const successText = `${actionText}基金 ${code}，实际持有份额已固定为 ${fmt(savedShares, 2)}；每天北京时间 00:00 只更新持有金额和持有收益。`;
     setGlobalMessage(els.message, successText, 'success');
 
     if (keepOpen) {
@@ -594,7 +662,9 @@ async function saveAll() {
       await refreshLiveHoldings({ silent: true, codes: savedCodes });
     }
 
-    setGlobalMessage(els.message, `已保存 ${savedCodes.length + clearedCodes.length} 只基金。实际持有份额已固定为你填写的数值；持有金额和持有收益已按最新行情重新计算。`, 'success');
+    const latest = readLocalState();
+    saveAndSync({ positions: { ...(latest.positions || {}) } });
+    setGlobalMessage(els.message, `已保存 ${savedCodes.length + clearedCodes.length} 只基金并同步到 KV。实际份额以你填写的数值为准；自动行情更新固定为每天北京时间 00:00 一次。`, 'success');
   } finally {
     els.saveAll.disabled = false;
     setLoading(els.overlay, els.loadingText, false);
@@ -605,7 +675,7 @@ function clearAll() {
   if (!window.confirm('确定清空全部基金和个人持仓吗？此操作无法撤销。')) return;
   saveAndSync({ codes: '', positions: {}, fundMeta: {} });
   render();
-  setGlobalMessage(els.message, '已清空基金列表与本机个人持仓；基金代码清空状态将同步到 KV。', 'success');
+  setGlobalMessage(els.message, '已清空基金列表与个人持仓，清空状态将同步到 KV。', 'success');
 }
 
 els.openAdd.addEventListener('click', openAddModal);
@@ -631,19 +701,16 @@ normalizeStoredSharePrecision();
 render();
 initializeCloud({ syncStatus: els.sync, message: els.message }).then(async () => {
   render();
+  updateDailyStatus();
   const state = readLocalState();
   const missingNames = parseCodes(state.codes).filter(code => !isUsableFundName(state.fundMeta?.[code]?.name, code));
   if (missingNames.length) await recognizeNames(missingNames, { quiet: true, background: true });
-  await refreshLiveHoldings({ silent: false });
-  startLiveHoldingAutoRefresh();
+  await checkDailyMidnightUpdate({ showMessage: true });
+  startDailyMidnightUpdate();
   schedulePagePrefetch('settings');
 });
 
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && Date.now() - lastLiveHoldingRefreshAt > 30 * 1000) {
-    refreshLiveHoldings({ silent: true });
-  }
+  if (!document.hidden) checkDailyMidnightUpdate();
 });
-window.addEventListener('focus', () => {
-  if (Date.now() - lastLiveHoldingRefreshAt > 30 * 1000) refreshLiveHoldings({ silent: true });
-});
+window.addEventListener('focus', () => checkDailyMidnightUpdate());

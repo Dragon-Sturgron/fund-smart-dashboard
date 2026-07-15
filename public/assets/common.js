@@ -248,8 +248,57 @@ let pendingCloudState = null;
 let syncElement = null;
 let messageElement = null;
 
+function optionalCloudNumber(value) {
+  if (value === '' || value === null || value === undefined) return NaN;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : NaN;
+}
+
+function cloudPositionFromLocal(raw = {}) {
+  const amount = optionalCloudNumber(raw.holdingAmount);
+  const profit = optionalCloudNumber(raw.holdingProfit);
+  const shares = optionalCloudNumber(raw.shares);
+  const principal = optionalCloudNumber(raw.principal);
+  const costNav = optionalCloudNumber(raw.costNav);
+  const liveNav = optionalCloudNumber(raw.liveNav);
+  return {
+    holdingAmount: Number.isFinite(amount) && amount >= 0 ? Number(amount.toFixed(2)) : '',
+    holdingProfit: Number.isFinite(profit) ? Number(profit.toFixed(2)) : '',
+    shares: Number.isFinite(shares) && shares > 0 ? Number(shares.toFixed(2)) : '',
+    principal: Number.isFinite(principal) && principal > 0
+      ? Number(principal.toFixed(2))
+      : Number.isFinite(amount) && Number.isFinite(profit) && amount - profit > 0
+        ? Number((amount - profit).toFixed(2))
+        : '',
+    costNav: Number.isFinite(costNav) && costNav > 0 ? Number(costNav.toFixed(6)) : '',
+    calculatedAt: raw.calculatedAt || '',
+    shareBasis: Number.isFinite(shares) && shares > 0 ? 'manual-shares' : '',
+    navSource: Number.isFinite(shares) && shares > 0 ? '用户填写实际份额' : '',
+    liveNav: Number.isFinite(liveNav) && liveNav > 0 ? Number(liveNav.toFixed(6)) : '',
+    liveUpdatedAt: raw.liveUpdatedAt || '',
+    liveQuoteTime: raw.liveQuoteTime || '',
+    liveSource: raw.liveSource || ''
+  };
+}
+
 function cloudStateFromLocal(state = readLocalState()) {
-  return { codes: parseCodes(state.codes).join('\n') };
+  const codes = parseCodes(state.codes);
+  const positions = {};
+  for (const code of codes) {
+    if (!Object.prototype.hasOwnProperty.call(state.positions || {}, code)) continue;
+    positions[code] = cloudPositionFromLocal(state.positions[code]);
+  }
+  return {
+    codes: codes.join('\n'),
+    positions,
+    dailyUpdate: {
+      time: '00:00',
+      lastDate: /^\d{4}-\d{2}-\d{2}$/.test(String(state.dailyUpdate?.lastDate || ''))
+        ? String(state.dailyUpdate.lastDate)
+        : '',
+      lastAt: state.dailyUpdate?.lastAt || ''
+    }
+  };
 }
 
 function setSyncStatus(text, tone = 'pending') {
@@ -281,7 +330,7 @@ export function queueCloudSave(state = readLocalState()) {
   if (!cloudSyncEnabled) return;
   pendingCloudState = cloudStateFromLocal(state);
   clearTimeout(cloudSaveTimer);
-  setSyncStatus('等待同步基金列表', 'pending');
+  setSyncStatus('等待同步基金与持仓', 'pending');
   cloudSaveTimer = setTimeout(flushCloudSave, 700);
 }
 
@@ -292,17 +341,17 @@ export async function flushCloudSave() {
   while (pendingCloudState) {
     const state = pendingCloudState;
     pendingCloudState = null;
-    setSyncStatus('正在同步基金列表', 'saving');
+    setSyncStatus('正在同步基金与持仓', 'saving');
     try {
       const payload = await requestCloudState('PUT', state);
       const time = payload.updatedAt
         ? new Date(payload.updatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
         : '';
-      setSyncStatus(`基金列表已同步${time ? ` · ${time}` : ''}`, 'synced');
+      setSyncStatus(`基金与持仓已同步${time ? ` · ${time}` : ''}`, 'synced');
     } catch (error) {
       pendingCloudState = state;
-      setSyncStatus('基金列表同步失败，点击重试', 'error');
-      setGlobalMessage(messageElement, error.message || '基金列表同步失败；基金代码和个人持仓仍保存在本机。', 'error');
+      setSyncStatus('基金与持仓同步失败，点击重试', 'error');
+      setGlobalMessage(messageElement, error.message || '基金与持仓同步失败；数据仍保存在本机。', 'error');
       break;
     }
   }
@@ -311,22 +360,36 @@ export async function flushCloudSave() {
 
 export function saveAndSync(partial = {}) {
   const state = writeLocalState(partial);
-  if (Object.prototype.hasOwnProperty.call(partial, 'codes')) queueCloudSave(state);
+  if (
+    Object.prototype.hasOwnProperty.call(partial, 'codes')
+    || Object.prototype.hasOwnProperty.call(partial, 'positions')
+    || Object.prototype.hasOwnProperty.call(partial, 'dailyUpdate')
+  ) queueCloudSave(state);
   return state;
 }
 
 export async function initializeCloud({ syncStatus, message } = {}) {
   syncElement = syncStatus || null;
   messageElement = message || null;
-  setSyncStatus('正在读取基金列表', 'saving');
+  setSyncStatus('正在读取基金与持仓', 'saving');
   try {
     const payload = await requestCloudState('GET');
     cloudSyncEnabled = true;
     if (payload.data) {
       const local = readLocalState();
+      const cloudCodes = parseCodes(payload.data.codes);
+      const cloudPositions = payload.data.positions && typeof payload.data.positions === 'object'
+        ? payload.data.positions
+        : {};
+      const cloudHasPositions = Object.keys(cloudPositions).length > 0;
+      const localPositions = local.positions && typeof local.positions === 'object' ? local.positions : {};
       const merged = {
         ...local,
-        codes: parseCodes(payload.data.codes).join('\n'),
+        codes: cloudCodes.join('\n'),
+        positions: cloudHasPositions ? cloudPositions : localPositions,
+        dailyUpdate: payload.data.dailyUpdate && typeof payload.data.dailyUpdate === 'object'
+          ? { time: '00:00', ...payload.data.dailyUpdate }
+          : { time: '00:00', ...(local.dailyUpdate || {}) },
         version: 5,
         localUpdatedAt: new Date().toISOString()
       };
@@ -334,21 +397,27 @@ export async function initializeCloud({ syncStatus, message } = {}) {
       const time = payload.updatedAt
         ? new Date(payload.updatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
         : '';
-      setSyncStatus(`已从 KV 恢复基金列表${time ? ` · ${time}` : ''}`, 'synced');
-      return merged;
+      setSyncStatus(`已从 KV 恢复基金与持仓${time ? ` · ${time}` : ''}`, 'synced');
+
+      // 从“仅保存代码”的旧版升级时，将本机已有持仓补充上传到新 KV 结构。
+      if (!cloudHasPositions && Object.keys(localPositions).length > 0) {
+        pendingCloudState = cloudStateFromLocal(merged);
+        await flushCloudSave();
+      }
+      return readLocalState();
     }
     const local = readLocalState();
-    if (parseCodes(local.codes).length) {
+    if (parseCodes(local.codes).length || Object.keys(local.positions || {}).length) {
       pendingCloudState = cloudStateFromLocal(local);
       await flushCloudSave();
     } else {
-      setSyncStatus('KV 已连接，等待添加基金', 'synced');
+      setSyncStatus('KV 已连接，等待添加基金与持仓', 'synced');
     }
     return local;
   } catch (error) {
     cloudSyncEnabled = false;
-    if (error.code === 'KV_NOT_BOUND') setSyncStatus('KV 未绑定，基金列表仅本机保存', 'local');
-    else setSyncStatus('KV 暂不可用，基金列表仅本机保存', 'error');
+    if (error.code === 'KV_NOT_BOUND') setSyncStatus('KV 未绑定，基金与持仓仅本机保存', 'local');
+    else setSyncStatus('KV 暂不可用，基金与持仓仅本机保存', 'error');
     return readLocalState();
   }
 }

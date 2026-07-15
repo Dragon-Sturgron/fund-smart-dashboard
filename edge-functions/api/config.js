@@ -6,9 +6,14 @@ const headers = {
   'access-control-allow-headers': 'content-type'
 };
 
-const KV_KEY = 'fund_dashboard_codes_v1';
-const LEGACY_KEYS = ['fund_dashboard_state_v3', 'fund_dashboard_state_v2'];
+const KV_KEY = 'fund_dashboard_portfolio_v1';
+const LEGACY_KEYS = [
+  'fund_dashboard_codes_v1',
+  'fund_dashboard_state_v3',
+  'fund_dashboard_state_v2'
+];
 const MAX_FUNDS = 12;
+const DAILY_UPDATE_TIME = '00:00';
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers });
@@ -26,12 +31,88 @@ function parseCodes(value) {
     .slice(0, MAX_FUNDS);
 }
 
-function sanitizeState(input, preserveUpdatedAt = false) {
+function finite(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+
+function roundHalfUp(value, digits = 2) {
+  const number = finite(value);
+  if (number === null) return '';
+  const factor = 10 ** digits;
+  return Math.round((number + Number.EPSILON) * factor) / factor;
+}
+
+function cleanText(value, maxLength = 80) {
+  return value === null || value === undefined ? '' : String(value).slice(0, maxLength);
+}
+
+function sanitizePosition(raw = {}) {
+  const amountNumber = finite(raw.holdingAmount);
+  const profitNumber = finite(raw.holdingProfit);
+  const sharesNumber = finite(raw.shares);
+  const amount = amountNumber !== null && amountNumber >= 0 ? roundHalfUp(amountNumber, 2) : '';
+  const profit = profitNumber !== null ? roundHalfUp(profitNumber, 2) : '';
+  const shares = sharesNumber !== null && sharesNumber > 0 ? roundHalfUp(sharesNumber, 2) : '';
+  const derivedPrincipal = amount !== '' && profit !== '' ? roundHalfUp(amount - profit, 2) : '';
+  const principalNumber = finite(raw.principal);
+  const principal = principalNumber !== null && principalNumber > 0
+    ? roundHalfUp(principalNumber, 2)
+    : derivedPrincipal !== '' && derivedPrincipal > 0 ? derivedPrincipal : '';
+  const costNavNumber = finite(raw.costNav);
+  const costNav = costNavNumber !== null && costNavNumber > 0
+    ? roundHalfUp(costNavNumber, 6)
+    : principal !== '' && shares !== '' && shares > 0 ? roundHalfUp(principal / shares, 6) : '';
+  const liveNavNumber = finite(raw.liveNav);
+
   return {
-    version: 1,
-    codes: parseCodes(input?.codes).join('\n'),
+    holdingAmount: amount,
+    holdingProfit: profit,
+    shares,
+    principal,
+    costNav,
+    calculatedAt: cleanText(raw.calculatedAt, 40),
+    shareBasis: shares !== '' ? 'manual-shares' : '',
+    navSource: shares !== '' ? '用户填写实际份额' : '',
+    liveNav: liveNavNumber !== null && liveNavNumber > 0 ? roundHalfUp(liveNavNumber, 6) : '',
+    liveUpdatedAt: cleanText(raw.liveUpdatedAt, 40),
+    liveQuoteTime: cleanText(raw.liveQuoteTime, 40),
+    liveSource: cleanText(raw.liveSource, 40)
+  };
+}
+
+function sanitizePositions(input, codes) {
+  const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  const positions = {};
+  for (const code of codes) {
+    if (!Object.prototype.hasOwnProperty.call(source, code)) continue;
+    positions[code] = sanitizePosition(source[code]);
+  }
+  return positions;
+}
+
+function sanitizeDailyUpdate(input = {}) {
+  const lastDate = /^\d{4}-\d{2}-\d{2}$/.test(String(input?.lastDate || ''))
+    ? String(input.lastDate)
+    : '';
+  return {
+    time: DAILY_UPDATE_TIME,
+    lastDate,
+    lastAt: cleanText(input?.lastAt, 40)
+  };
+}
+
+function sanitizeState(input, preserveUpdatedAt = false) {
+  const codes = parseCodes(input?.codes);
+  return {
+    version: 2,
+    codes: codes.join('\n'),
+    positions: sanitizePositions(input?.positions, codes),
+    dailyUpdate: sanitizeDailyUpdate(input?.dailyUpdate),
     updatedAt: preserveUpdatedAt && input?.updatedAt
-      ? String(input.updatedAt).slice(0, 40)
+      ? cleanText(input.updatedAt, 40)
       : new Date().toISOString()
   };
 }

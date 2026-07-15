@@ -1,6 +1,6 @@
 {
   "name": "fund-smart-dashboard",
-  "version": "2.6.1-manual-shares",
-  "feature": "editable-manual-shares-and-live-holding-recalculation",
+  "version": "2.7.0-kv-daily-midnight",
+  "feature": "positions-synced-to-kv-and-daily-beijing-midnight-update",
   "settingsPage": "/settings.html"
 }
