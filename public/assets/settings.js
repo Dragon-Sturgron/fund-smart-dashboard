@@ -18,6 +18,10 @@ const els = {
 };
 
 let lastFocusedElement = null;
+const dirtyPositionCodes = new Set();
+let liveHoldingTimer = null;
+let liveHoldingRefreshing = false;
+let lastLiveHoldingRefreshAt = 0;
 
 function clearAddForm() {
   els.newCode.value = '';
@@ -124,6 +128,60 @@ function calculatePosition(holdingAmount, holdingProfit, nav, previous = {}, quo
   };
 }
 
+function principalFor(position = {}) {
+  const stored = num(position.principal, 0);
+  if (stored > 0) return stored;
+  const amount = num(position.holdingAmount, 0);
+  const profit = num(position.holdingProfit, 0);
+  const derived = amount - profit;
+  return derived > 0 ? derived : 0;
+}
+
+function liveNavForQuote(item = {}) {
+  const estimated = num(item.estimatedNav, 0);
+  if (estimated > 0) return { nav: estimated, source: '盘中估算净值' };
+  const confirmed = num(item.previousNav, 0);
+  if (confirmed > 0) return { nav: confirmed, source: '上一确认净值' };
+  return { nav: 0, source: '' };
+}
+
+function applyLiveQuoteToPosition(position = {}, item = {}) {
+  const shares = num(position.shares, 0);
+  const principal = principalFor(position);
+  const quote = liveNavForQuote(item);
+  if (!(shares > 0) || !(principal > 0) || !(quote.nav > 0)) return position;
+
+  const holdingAmount = roundHalfUp(shares * quote.nav, 2);
+  const holdingProfit = roundHalfUp(holdingAmount - principal, 2);
+  return {
+    ...position,
+    principal: Number(principal.toFixed(2)),
+    holdingAmount,
+    holdingProfit,
+    liveNav: Number(quote.nav.toFixed(6)),
+    liveRate: Number.isFinite(Number(item.estimatedRate)) ? Number(item.estimatedRate) : '',
+    liveUpdatedAt: new Date().toISOString(),
+    liveQuoteTime: item.time || '',
+    liveSource: quote.source
+  };
+}
+
+function positionChanged(left = {}, right = {}) {
+  return num(left.holdingAmount, 0) !== num(right.holdingAmount, 0)
+    || num(left.holdingProfit, 0) !== num(right.holdingProfit, 0)
+    || num(left.liveNav, 0) !== num(right.liveNav, 0)
+    || String(left.liveQuoteTime || '') !== String(right.liveQuoteTime || '');
+}
+
+function updatePositionInputsInDom(code, position) {
+  document.querySelectorAll(`input[data-code="${code}"][data-pos="holdingAmount"]`).forEach(input => {
+    input.value = position.holdingAmount ?? '';
+  });
+  document.querySelectorAll(`input[data-code="${code}"][data-pos="holdingProfit"]`).forEach(input => {
+    input.value = position.holdingProfit ?? '';
+  });
+}
+
 function holdingStatus(position) {
   const amount = num(position.holdingAmount, 0);
   const shares = num(position.shares, 0);
@@ -197,45 +255,113 @@ function renderStats(state = readLocalState(), codes = parseCodes(state.codes)) 
   els.statHoldingProfit.classList.toggle('text-green', holdingProfit < 0);
 }
 
-function updatePositionFromInput(input) {
+function syncPositionInput(input) {
   const code = input.dataset.code;
   const key = input.dataset.pos;
   const value = key === 'holdingProfit' ? cleanSignedInput(input.value) : cleanPositiveInput(input.value);
   document.querySelectorAll(`input[data-code="${code}"][data-pos="${key}"]`).forEach(item => {
     if (item !== input) item.value = value;
   });
-
-  const state = readLocalState();
-  const positions = { ...(state.positions || {}) };
-  const previous = positionFor(state, code);
-  const nextRaw = { ...previous, [key]: value };
-  const nav = calculationNav(previous);
-  positions[code] = calculatePosition(nextRaw.holdingAmount, nextRaw.holdingProfit, nav, nextRaw);
-  writeLocalState({ positions });
-  render();
 }
 
 function bindDynamicEvents() {
   document.querySelectorAll('.position-input').forEach(input => {
-    input.addEventListener('change', event => updatePositionFromInput(event.currentTarget));
+    // 表格与手机卡片互相同步输入值，但不提前计算份额。
+    // 只有点击“保存全部持仓”后，才重新读取确认净值并统一计算。
+    input.addEventListener('input', event => {
+      const current = event.currentTarget;
+      syncPositionInput(current);
+      dirtyPositionCodes.add(current.dataset.code);
+    });
   });
   document.querySelectorAll('[data-remove]').forEach(button => {
     button.addEventListener('click', () => removeFund(button.dataset.remove));
   });
 }
 
-function collectPositionsFromInputs() {
+function collectPositionDraftsFromInputs() {
   const state = readLocalState();
-  const positions = { ...(state.positions || {}) };
+  const drafts = {};
   for (const code of parseCodes(state.codes)) {
     const previous = positionFor(state, code);
     const amountInput = document.querySelector(`input[data-code="${code}"][data-pos="holdingAmount"]`);
     const profitInput = document.querySelector(`input[data-code="${code}"][data-pos="holdingProfit"]`);
-    const amount = cleanPositiveInput(amountInput?.value ?? previous.holdingAmount ?? '');
-    const profit = cleanSignedInput(profitInput?.value ?? previous.holdingProfit ?? '');
-    positions[code] = calculatePosition(amount, profit, calculationNav(previous), previous);
+    drafts[code] = {
+      previous,
+      amount: cleanPositiveInput(amountInput?.value ?? previous.holdingAmount ?? ''),
+      profit: cleanSignedInput(profitInput?.value ?? previous.holdingProfit ?? '')
+    };
   }
-  return positions;
+  return drafts;
+}
+
+async function refreshLiveHoldings({ silent = true, codes = null } = {}) {
+  if (liveHoldingRefreshing || document.hidden) return;
+  const state = readLocalState();
+  const requestedCodes = codes ? parseCodes(codes.join(',')) : parseCodes(state.codes);
+  const targets = requestedCodes.filter(code => {
+    const position = positionFor(state, code);
+    return !dirtyPositionCodes.has(code)
+      && num(position.shares, 0) > 0
+      && principalFor(position) > 0;
+  });
+  if (!targets.length) return;
+
+  liveHoldingRefreshing = true;
+  try {
+    const realtime = await fetchRealtimeMany(targets);
+    if (realtime.items.length) {
+      cacheRealtime(realtime.items);
+      updateFundMeta(realtime.items);
+    }
+
+    const latestState = readLocalState();
+    const positions = { ...(latestState.positions || {}) };
+    const changedCodes = [];
+    for (const item of realtime.items) {
+      if (dirtyPositionCodes.has(item.code)) continue;
+      const previous = positionFor(latestState, item.code);
+      const next = applyLiveQuoteToPosition(previous, item);
+      if (positionChanged(previous, next)) {
+        positions[item.code] = next;
+        changedCodes.push(item.code);
+      }
+    }
+
+    if (changedCodes.length) {
+      const nextState = writeLocalState({ positions });
+      if (dirtyPositionCodes.size === 0) {
+        render();
+      } else {
+        for (const code of changedCodes) updatePositionInputsInDom(code, positionFor(nextState, code));
+        renderStats(nextState, parseCodes(nextState.codes));
+      }
+    }
+    lastLiveHoldingRefreshAt = Date.now();
+
+    if (!silent) {
+      if (realtime.errors.length) {
+        setGlobalMessage(
+          els.message,
+          `盘中持仓已更新 ${realtime.items.length} 只，${realtime.errors.length} 只暂时失败。持有金额与持有收益将按实时估算继续自动变化。`,
+          'error'
+        );
+      } else {
+        setGlobalMessage(
+          els.message,
+          `已按盘中估算更新 ${realtime.items.length} 只基金的持有金额和持有收益；页面打开期间每 60 秒自动刷新。`,
+          'success'
+        );
+      }
+    }
+  } finally {
+    liveHoldingRefreshing = false;
+  }
+}
+
+function startLiveHoldingAutoRefresh() {
+  clearInterval(liveHoldingTimer);
+  liveHoldingTimer = setInterval(() => refreshLiveHoldings({ silent: true }), 60 * 1000);
 }
 
 async function recognizeNames(codes = parseCodes(readLocalState().codes), { quiet = false, background = false } = {}) {
@@ -369,7 +495,8 @@ async function addFund({ keepOpen = false } = {}) {
     const quote = await resolveFundQuote(code);
     const codes = existing.includes(code) ? existing : [...existing, code];
     const positions = { ...(state.positions || {}) };
-    positions[code] = calculatePosition(amount, profit, quote.nav, positionFor(state, code), { shareBasis: quote.shareBasis, navSource: quote.source });
+    const basePosition = calculatePosition(amount, profit, quote.nav, positionFor(state, code), { shareBasis: quote.shareBasis, navSource: quote.source });
+    positions[code] = applyLiveQuoteToPosition(basePosition, quote.item || {});
     saveAndSync({ codes: codes.join('\n'), positions });
     updateFundMeta([{ ...quote.item, code }]);
 
@@ -377,7 +504,7 @@ async function addFund({ keepOpen = false } = {}) {
     render();
     const shares = num(positions[code].shares, 0);
     const actionText = existing.includes(code) ? '已更新' : '已添加';
-    const successText = `${actionText}基金 ${code}，按${quote.source} ${fmt(quote.nav, 4)} 计算持有份额 ${fmt(shares, 2)}；基金代码将同步到 KV。`;
+    const successText = `${actionText}基金 ${code}，按${quote.source} ${fmt(quote.nav, 4)} 计算持有份额 ${fmt(shares, 2)}；持有金额和持有收益已按盘中估算自动更新，基金代码将同步到 KV。`;
     setGlobalMessage(els.message, successText, 'success');
 
     if (keepOpen) {
@@ -483,11 +610,102 @@ function removeFund(code) {
   setGlobalMessage(els.message, `已删除基金 ${code}。`, 'success');
 }
 
-function saveAll() {
-  const positions = collectPositionsFromInputs();
-  writeLocalState({ positions });
-  render();
-  setGlobalMessage(els.message, '持有金额、持有收益和持有份额已保存到当前浏览器；KV 仅保存基金代码。', 'success');
+async function saveAll() {
+  const state = readLocalState();
+  const codes = parseCodes(state.codes);
+  const drafts = collectPositionDraftsFromInputs();
+  const positions = { ...(state.positions || {}) };
+  const validationErrors = [];
+  const targets = [];
+  const clearedCodes = [];
+
+  for (const code of codes) {
+    if (!dirtyPositionCodes.has(code)) continue;
+    const { previous, amount, profit } = drafts[code];
+    const amountNumber = Number(amount);
+    const profitNumber = Number(profit);
+
+    if (amount === '' && profit === '') {
+      positions[code] = calculatePosition('', '', 0, previous);
+      clearedCodes.push(code);
+      continue;
+    }
+    if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
+      validationErrors.push(`${code}：持有金额必须大于 0`);
+      continue;
+    }
+    if (profit === '' || !Number.isFinite(profitNumber)) {
+      validationErrors.push(`${code}：请填写持有收益，没有收益时填写 0`);
+      continue;
+    }
+    if (amountNumber - profitNumber <= 0) {
+      validationErrors.push(`${code}：持有收益不能大于或等于持有金额`);
+      continue;
+    }
+    targets.push({ code, previous, amount: amountNumber, profit: profitNumber });
+  }
+
+  if (validationErrors.length) {
+    setGlobalMessage(els.message, `保存失败：${validationErrors.join('；')}。`, 'error');
+    return;
+  }
+  if (!targets.length && !clearedCodes.length) {
+    setGlobalMessage(els.message, '没有检测到需要保存的持仓修改。盘中持有金额和持有收益会自动更新，无需重复点击保存。', 'success');
+    return;
+  }
+
+  els.saveAll.disabled = true;
+  setLoading(els.overlay, els.loadingText, true, `正在保存 ${targets.length + clearedCodes.length} 只基金的持仓基准`);
+  try {
+    const results = await Promise.all(targets.map(async target => {
+      try {
+        const quote = await resolveFundQuote(target.code);
+        const basePosition = calculatePosition(
+          target.amount,
+          target.profit,
+          quote.nav,
+          target.previous,
+          { shareBasis: quote.shareBasis, navSource: quote.source }
+        );
+        return {
+          ok: true,
+          code: target.code,
+          position: applyLiveQuoteToPosition(basePosition, quote.item || {}),
+          quote
+        };
+      } catch (error) {
+        return { ok: false, code: target.code, message: error.message };
+      }
+    }));
+
+    const success = results.filter(item => item.ok);
+    const failed = results.filter(item => !item.ok);
+    for (const item of success) {
+      positions[item.code] = item.position;
+      dirtyPositionCodes.delete(item.code);
+    }
+    for (const code of clearedCodes) dirtyPositionCodes.delete(code);
+
+    writeLocalState({ positions });
+    render();
+
+    if (failed.length) {
+      setGlobalMessage(
+        els.message,
+        `已保存 ${success.length + clearedCodes.length} 只基金；${failed.length} 只失败：${failed.map(item => `${item.code}：${item.message}`).join('；')}。失败基金保留待保存状态。`,
+        'error'
+      );
+    } else {
+      setGlobalMessage(
+        els.message,
+        `已保存 ${success.length + clearedCodes.length} 只基金的持仓基准。持有份额保持两位小数，持有金额与持有收益已按盘中估算更新，并会每 60 秒继续自动变化。`,
+        'success'
+      );
+    }
+  } finally {
+    els.saveAll.disabled = false;
+    setLoading(els.overlay, els.loadingText, false);
+  }
 }
 
 function clearAll() {
@@ -524,5 +742,16 @@ initializeCloud({ syncStatus: els.sync, message: els.message }).then(async () =>
   const missingNames = parseCodes(state.codes).filter(code => !isUsableFundName(state.fundMeta?.[code]?.name, code));
   if (missingNames.length) await recognizeNames(missingNames, { quiet: true, background: true });
   await repairLegacyShareCalculations();
+  await refreshLiveHoldings({ silent: false });
+  startLiveHoldingAutoRefresh();
   schedulePagePrefetch('settings');
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && Date.now() - lastLiveHoldingRefreshAt > 30 * 1000) {
+    refreshLiveHoldings({ silent: true });
+  }
+});
+window.addEventListener('focus', () => {
+  if (Date.now() - lastLiveHoldingRefreshAt > 30 * 1000) refreshLiveHoldings({ silent: true });
 });
